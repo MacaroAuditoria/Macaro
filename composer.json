@@ -1,0 +1,19 @@
+{
+    "name": "macaro/sistema",
+    "description": "Sistema de Gestión de Auditorías e Inventarios MACARO",
+    "type": "project",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Macaro",
+            "email": "macaroauditorias@gmail.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {}
+}
