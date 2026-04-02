@@ -19,7 +19,7 @@
 </div>
 
 <div class="menu-grid">
-    <a href="#" class="menu-card">
+    <a href="?action=piqueo_config" class="menu-card">
         <span class="menu-icon">📦</span>
         <h3 class="menu-title">Piqueo</h3>
     </a>

@@ -16,11 +16,6 @@
 </div>
 
 <div class="menu-grid">
-    <a href="?action=marcas" class="menu-card">
-        <span class="menu-icon">🏷️</span>
-        <h3 class="menu-title">Marcas</h3>
-    </a>
-
     <a href="?action=categorias" class="menu-card">
         <span class="menu-icon">📁</span>
         <h3 class="menu-title">Categorías</h3>
