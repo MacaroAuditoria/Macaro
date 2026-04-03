@@ -29,9 +29,16 @@
         <span class="menu-icon">📋</span>
         <h3 class="menu-title">Catálogo</h3>
     </a>
-    <a href="#" class="menu-card">
+    
+    <a href="index.php?action=monitor_zonas" class="menu-card">
         <span class="menu-icon">📊</span>
-        <h3 class="menu-title">Reportes</h3>
+        <h3 class="menu-title">Monitor</h3>
+    </a>
+    
+    <!-- NUEVA TARJETA DE INVENTARIO CON EL FORMATO CORRECTO -->
+    <a href="index.php?action=inventario_menu" class="menu-card" style="border: 2px solid #00897b; background: #e0f2f1;">
+        <span class="menu-icon">📥</span>
+        <h3 class="menu-title">Inventario</h3>
     </a>
     <?php endif; ?>
 
