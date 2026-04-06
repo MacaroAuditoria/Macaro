@@ -24,34 +24,46 @@
         <h3 class="menu-title">Piqueo</h3>
     </a>
 
+    <!-- TODO LO QUE VEN ADMIN Y ENCARGADO -->
     <?php if ($_SESSION['rol_id'] <= 2): ?>
-    <a href="?action=catalogo" class="menu-card">
-        <span class="menu-icon">📋</span>
-        <h3 class="menu-title">Catálogo</h3>
-    </a>
     
-    <a href="index.php?action=monitor_zonas" class="menu-card">
-        <span class="menu-icon">📊</span>
-        <h3 class="menu-title">Monitor</h3>
-    </a>
+        <a href="?action=catalogo" class="menu-card">
+            <span class="menu-icon">📋</span>
+            <h3 class="menu-title">Catálogo</h3>
+        </a>
+        
+        <a href="index.php?action=monitor_zonas" class="menu-card">
+            <span class="menu-icon">📊</span>
+            <h3 class="menu-title">Monitor</h3>
+        </a>
+
+        <a href="index.php?action=ajustes_menu" class="menu-card">
+            <span class="menu-icon">⚙️</span>
+            <h3 class="menu-title">Ajustes</h3>
+        </a>
+
+        <a href="index.php?action=inventario_menu" class="menu-card" style="border: 2px solid #00897b; background: #e0f2f1;">
+            <span class="menu-icon">📥</span>
+            <h3 class="menu-title">Inventario</h3>
+        </a>
+
+        <!-- Tarjeta unificada en el Dashboard -->
+        <a href="index.php?action=menu_graficos" class="menu-card">
+            <span class="menu-icon">📊</span>
+            <h3 class="menu-title">Gráficos</h3>
+        </a>
+    <?php endif; ?> <!-- ACÁ CERRAMOS EL GRUPO DE ADMIN/ENCARGADO -->
+
+
+    <!-- LO QUE VE SOLO EL ADMIN -->
+    <?php if ($_SESSION['rol_id'] == 1): ?>
+        <a href="index.php?action=usuarios_gestion"" class="menu-card">
+            <span class="menu-icon">👥</span>
+            <h3 class="menu-title">Usuarios</h3>
+        </a>
     
-    <!-- NUEVA TARJETA DE INVENTARIO CON EL FORMATO CORRECTO -->
-    <a href="index.php?action=inventario_menu" class="menu-card" style="border: 2px solid #00897b; background: #e0f2f1;">
-        <span class="menu-icon">📥</span>
-        <h3 class="menu-title">Inventario</h3>
-    </a>
     <?php endif; ?>
 
-    <?php if ($_SESSION['rol_id'] == 1): ?>
-    <a href="#" class="menu-card">
-        <span class="menu-icon">👥</span>
-        <h3 class="menu-title">Usuarios</h3>
-    </a>
-    <a href="#" class="menu-card">
-        <span class="menu-icon">⚙️</span>
-        <h3 class="menu-title">Ajustes</h3>
-    </a>
-    <?php endif; ?>
 </div>
 
 </body>

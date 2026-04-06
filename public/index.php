@@ -24,52 +24,67 @@ if (isset($_GET['action']) && $_GET['action'] === 'catalogo' && isset($_SESSION[
 // MÓDULO DE CATEGORÍAS (ABM COMPLETO)
 // ==========================================
 
-// 1. ALTA Y LECTURA
-if (isset($_GET['action']) && $_GET['action'] === 'categorias' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+// 1. LISTADO Y ALTA (Actualizado con Teléfono, Email y Fecha Nacimiento)
+if (isset($_GET['action']) && $_GET['action'] === 'usuarios_gestion' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
+    $error = "";
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nueva_categoria'])) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['usuario']) && !empty($_POST['password'])) {
         try {
-            $stmt = $db->prepare("INSERT INTO categorias (nombre) VALUES (:nombre)");
-            $stmt->execute(['nombre' => trim($_POST['nueva_categoria'])]);
-            header("Location: index.php?action=categorias");
+            $hash = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
+            $stmt = $db->prepare("INSERT INTO usuarios (nombre_completo, usuario, password, rol_id, estado, telefono, email, fecha_nacimiento) VALUES (?, ?, ?, ?, 1, ?, ?, ?)");
+            $stmt->execute([
+                trim($_POST['nombre_completo']),
+                trim($_POST['usuario']),
+                $hash,
+                $_POST['rol_id'],
+                !empty($_POST['telefono']) ? trim($_POST['telefono']) : null,
+                !empty($_POST['email']) ? trim($_POST['email']) : null,
+                !empty($_POST['fecha_nacimiento']) ? $_POST['fecha_nacimiento'] : null
+            ]);
+            header("Location: index.php?action=usuarios_gestion");
             exit;
         } catch (Exception $e) {
-            $error = "La categoría ya existe o hubo un error.";
+            $error = "❌ Error: El nombre de usuario ya existe.";
         }
     }
-    $stmt = $db->query("SELECT id, nombre FROM categorias ORDER BY nombre ASC");
-    $listaCategorias = $stmt->fetchAll();
-    require_once __DIR__ . '/../src/Application/Views/categorias.php';
+
+    $listaUsuarios = $db->query("SELECT u.*, r.nombre as rol_nombre FROM usuarios u LEFT JOIN roles r ON u.rol_id = r.id ORDER BY r.id ASC, u.nombre_completo ASC")->fetchAll();
+    $listaRoles = $db->query("SELECT id, nombre FROM roles ORDER BY id ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/usuarios_gestion.php';
     exit;
 }
 
-// 2. MODIFICACIÓN (EDICIÓN)
-if (isset($_GET['action']) && $_GET['action'] === 'editar_categoria' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+// 2. EDICIÓN (Actualizado)
+if (isset($_GET['action']) && $_GET['action'] === 'editar_usuario' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre']) && !empty($_POST['id'])) {
-        try {
-            $stmt = $db->prepare("UPDATE categorias SET nombre = :nombre WHERE id = :id");
-            $stmt->execute(['nombre' => trim($_POST['nombre']), 'id' => $_POST['id']]);
-            header("Location: index.php?action=categorias"); 
-            exit;
-        } catch (Exception $e) {
-            $error = "La categoría ya existe o hubo un error.";
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['id'])) {
+        $tel = !empty($_POST['telefono']) ? trim($_POST['telefono']) : null;
+        $mail = !empty($_POST['email']) ? trim($_POST['email']) : null;
+        $f_nac = !empty($_POST['fecha_nacimiento']) ? $_POST['fecha_nacimiento'] : null;
+
+        if (!empty($_POST['password'])) {
+            $hash = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
+            $stmt = $db->prepare("UPDATE usuarios SET nombre_completo = ?, usuario = ?, password = ?, rol_id = ?, estado = ?, telefono = ?, email = ?, fecha_nacimiento = ? WHERE id = ?");
+            $stmt->execute([trim($_POST['nombre_completo']), trim($_POST['usuario']), $hash, $_POST['rol_id'], $_POST['estado'], $tel, $mail, $f_nac, $_POST['id']]);
+        } else {
+            $stmt = $db->prepare("UPDATE usuarios SET nombre_completo = ?, usuario = ?, rol_id = ?, estado = ?, telefono = ?, email = ?, fecha_nacimiento = ? WHERE id = ?");
+            $stmt->execute([trim($_POST['nombre_completo']), trim($_POST['usuario']), $_POST['rol_id'], $_POST['estado'], $tel, $mail, $f_nac, $_POST['id']]);
         }
+        header("Location: index.php?action=usuarios_gestion");
+        exit;
     }
-    if (isset($_GET['id'])) {
-        $stmt = $db->prepare("SELECT id, nombre FROM categorias WHERE id = :id");
-        $stmt->execute(['id' => $_GET['id']]);
-        $catActual = $stmt->fetch();
-        if ($catActual) {
-            require_once __DIR__ . '/../src/Application/Views/editar_categoria.php';
-            exit;
-        }
-    }
-    header("Location: index.php?action=categorias");
+
+    $stmt = $db->prepare("SELECT * FROM usuarios WHERE id = ?");
+    $stmt->execute([$_GET['id']]);
+    $usuario_editar = $stmt->fetch();
+    $listaRoles = $db->query("SELECT id, nombre FROM roles ORDER BY id ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/editar_usuario.php';
     exit;
 }
 
@@ -155,6 +170,82 @@ if (isset($_GET['action']) && $_GET['action'] === 'eliminar_distribuidor' && iss
     }
     header("Location: index.php?action=distribuidores");
     exit;
+}
+// ==========================================
+// MÓDULO: GESTIÓN DE ACTAS Y RENDIMIENTO (ADMIN)
+// ==========================================
+if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_ver', 'progreso_encargado'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado. Solo Administradores."); }
+    $db = (new Database())->getConnection();
+
+    // 1. BUSCADOR DE ACTAS
+    if ($_GET['action'] === 'actas_buscar') {
+        $filtro_local = $_GET['local_id'] ?? '';
+        $filtro_encargado = $_GET['encargado_id'] ?? '';
+
+        $query = "SELECT e.*, l.nombre as local_nombre, u.nombre_completo as encargado_nombre 
+                  FROM evaluaciones e 
+                  JOIN locales l ON e.local_id = l.id 
+                  JOIN usuarios u ON e.encargado_id = u.id 
+                  WHERE e.completada = 1";
+        $params = [];
+
+        if ($filtro_local) { $query .= " AND e.local_id = ?"; $params[] = $filtro_local; }
+        if ($filtro_encargado) { $query .= " AND e.encargado_id = ?"; $params[] = $filtro_encargado; }
+        $query .= " ORDER BY e.fecha_cierre DESC";
+
+        $stmt = $db->prepare($query);
+        $stmt->execute($params);
+        $actas = $stmt->fetchAll();
+
+        // En vez de: SELECT id, nombre FROM locales
+        // Tiene que ser:
+        $locales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre")->fetchAll();
+        $encargados = $db->query("SELECT id, nombre_completo FROM usuarios ORDER BY nombre_completo")->fetchAll();
+
+        require_once __DIR__ . '/../src/Application/Views/actas_buscar.php';
+        exit;
+    }
+
+    // 2. VER UN ACTA ESPECÍFICA (SOLO LECTURA)
+    if ($_GET['action'] === 'acta_ver') {
+        $stmt = $db->prepare("SELECT e.*, l.nombre as local_nombre, u.nombre_completo as encargado_nombre 
+                              FROM evaluaciones e 
+                              JOIN locales l ON e.local_id = l.id 
+                              JOIN usuarios u ON e.encargado_id = u.id 
+                              WHERE e.id = ?");
+        $stmt->execute([$_GET['id']]);
+        $acta = $stmt->fetch();
+        require_once __DIR__ . '/../src/Application/Views/acta_ver.php';
+        exit;
+    }
+
+    // 3. PROGRESO Y GRÁFICO DEL ENCARGADO
+    if ($_GET['action'] === 'progreso_encargado') {
+        $encargados = $db->query("SELECT id, nombre_completo FROM usuarios ORDER BY nombre_completo")->fetchAll();
+        $datos_grafico = null;
+        $encargado_seleccionado = null;
+
+        if (!empty($_GET['encargado_id'])) {
+            $stmt = $db->prepare("SELECT 
+                AVG(estrellas_puntualidad) as prom_puntualidad,
+                AVG(estrellas_organizacion) as prom_organizacion,
+                AVG(estrellas_prolijidad) as prom_prolijidad,
+                AVG(estrellas_trato) as prom_trato,
+                COUNT(id) as total_actas
+                FROM evaluaciones 
+                WHERE encargado_id = ? AND completada = 1");
+            $stmt->execute([$_GET['encargado_id']]);
+            $datos_grafico = $stmt->fetch();
+            
+            $stmt_enc = $db->prepare("SELECT nombre_completo FROM usuarios WHERE id = ?");
+            $stmt_enc->execute([$_GET['encargado_id']]);
+            $encargado_seleccionado = $stmt_enc->fetchColumn();
+        }
+        
+        require_once __DIR__ . '/../src/Application/Views/progreso_encargado.php';
+        exit;
+    }
 }
 
 // ==========================================
@@ -260,7 +351,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_vaciar_zona' && isset
     header("Location: index.php?action=monitor_zonas&local_id=" . $_GET['local_id'] . "&sector_id=" . $_GET['sector_id']);
     exit;
 }
-
+// ==========================================
 // ==========================================
 // MÓDULO DE PIQUEO (ZEBRA TC21)
 // ==========================================
@@ -549,6 +640,163 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_ejecutar_salto' && iss
 }
 // ==========================================
 // ==========================================
+// MÓDULO: ABM DE SECTORES
+// ==========================================
+
+// 1. LISTADO Y ALTA
+if (isset($_GET['action']) && $_GET['action'] === 'ajustes_sectores' && isset($_SESSION['usuario_id'])) {
+    // Permite acceso a Admin (1) y Encargados (2)
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre']) && !empty($_POST['local_id'])) {
+        $stmt = $db->prepare("INSERT INTO sectores (nombre, local_id) VALUES (?, ?)");
+        $stmt->execute([
+            trim($_POST['nombre']),
+            $_POST['local_id']
+        ]);
+        header("Location: index.php?action=ajustes_sectores");
+        exit;
+    }
+
+    // Traemos los sectores y le pegamos el nombre del local al que pertenecen
+    $listaSectores = $db->query("SELECT s.*, l.nombre as local_nombre 
+                                 FROM sectores s 
+                                 LEFT JOIN locales l ON s.local_id = l.id 
+                                 ORDER BY l.nombre ASC, s.nombre ASC")->fetchAll();
+    
+    // Traemos los locales para armar el menú desplegable (ComboBox)
+    $listaLocales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/ajustes_sectores.php';
+    exit;
+}
+
+// 2. EDICIÓN
+if (isset($_GET['action']) && $_GET['action'] === 'editar_sector' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['id']) && !empty($_POST['nombre']) && !empty($_POST['local_id'])) {
+        $stmt = $db->prepare("UPDATE sectores SET nombre = ?, local_id = ? WHERE id = ?");
+        $stmt->execute([
+            trim($_POST['nombre']),
+            $_POST['local_id'],
+            $_POST['id']
+        ]);
+        header("Location: index.php?action=ajustes_sectores");
+        exit;
+    }
+
+    $stmt = $db->prepare("SELECT * FROM sectores WHERE id = ?");
+    $stmt->execute([$_GET['id']]);
+    $sector = $stmt->fetch();
+    
+    $listaLocales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/editar_sector.php';
+    exit;
+}
+
+// 3. ELIMINACIÓN
+if (isset($_GET['action']) && $_GET['action'] === 'eliminar_sector' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    
+    try {
+        $stmt = $db->prepare("DELETE FROM sectores WHERE id = ?");
+        $stmt->execute([$_GET['id']]);
+    } catch (Exception $e) {
+        die("<div style='padding:20px; font-family:Arial;'><h3>❌ Error</h3><p>No se puede eliminar este sector porque ya tiene zonas asignadas o conteos realizados.</p><a href='index.php?action=ajustes_sectores'>Volver atrás</a></div>");
+    }
+    
+    header("Location: index.php?action=ajustes_sectores");
+    exit;
+}
+// ==========================================
+// MÓDULO: ABM DE LOCALES (INVENTARIOS)
+// ==========================================
+
+// 1. LISTADO Y ALTA
+if (isset($_GET['action']) && $_GET['action'] === 'ajustes_locales' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre'])) {
+        $stmt = $db->prepare("INSERT INTO locales (nombre, direccion, encargado_id) VALUES (?, ?, ?)");
+        $stmt->execute([
+            trim($_POST['nombre']),
+            trim($_POST['direccion']),
+            !empty($_POST['encargado_id']) ? $_POST['encargado_id'] : null
+        ]);
+        header("Location: index.php?action=ajustes_locales");
+        exit;
+    }
+
+    // Traemos los locales con el nombre del encargado
+    $listaLocales = $db->query("SELECT l.*, u.nombre_completo as encargado_nombre 
+                                FROM locales l 
+                                LEFT JOIN usuarios u ON l.encargado_id = u.id 
+                                ORDER BY l.nombre ASC")->fetchAll();
+    
+    // Traemos los usuarios que pueden ser encargados (Admin y Encargados activos)
+    $listaUsuarios = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id <= 2 AND estado = 1 ORDER BY nombre_completo ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/ajustes_locales.php';
+    exit;
+}
+
+// 2. EDICIÓN
+if (isset($_GET['action']) && $_GET['action'] === 'editar_local' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['id'])) {
+        $stmt = $db->prepare("UPDATE locales SET nombre = ?, direccion = ?, encargado_id = ? WHERE id = ?");
+        $stmt->execute([
+            trim($_POST['nombre']),
+            trim($_POST['direccion']),
+            !empty($_POST['encargado_id']) ? $_POST['encargado_id'] : null,
+            $_POST['id']
+        ]);
+        header("Location: index.php?action=ajustes_locales");
+        exit;
+    }
+
+    $stmt = $db->prepare("SELECT * FROM locales WHERE id = ?");
+    $stmt->execute([$_GET['id']]);
+    $local = $stmt->fetch();
+    
+    $listaUsuarios = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id <= 2 AND estado = 1 ORDER BY nombre_completo ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/editar_local.php';
+    exit;
+}
+
+// 3. ELIMINACIÓN
+if (isset($_GET['action']) && $_GET['action'] === 'eliminar_local' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    
+    try {
+        $stmt = $db->prepare("DELETE FROM locales WHERE id = ?");
+        $stmt->execute([$_GET['id']]);
+    } catch (Exception $e) {
+        die("<div style='padding:20px; font-family:Arial;'><h3>❌ Error</h3><p>No se puede eliminar este local porque tiene sectores o datos asociados.</p><a href='index.php?action=ajustes_locales'>Volver atrás</a></div>");
+    }
+    
+    header("Location: index.php?action=ajustes_locales");
+    exit;
+}
+// ==========================================
+// --- MÓDULO DE AJUSTES ---
+if (isset($_GET['action']) && $_GET['action'] === 'ajustes_menu' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    
+    // No necesitamos consultas a la base de datos aquí, solo cargar la vista
+    require_once __DIR__ . '/../src/Application/Views/ajustes_menu.php';
+    exit;
+}
 // ==========================================
 // MÓDULO DE INVENTARIO (CIERRE Y EXPORTACIÓN)
 // ==========================================
@@ -762,7 +1010,308 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_gestion' && isset($
     require_once __DIR__ . '/../src/Application/Views/productos_gestion.php';
     exit;
 }
+// ==========================================
+// ==========================================
+// MÓDULO: ABM DE USUARIOS
+// ==========================================
 
+// 1. LISTADO Y ALTA
+if (isset($_GET['action']) && $_GET['action'] === 'usuarios_gestion' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); } // Solo el Dios del sistema (Admin)
+    $db = (new Database())->getConnection();
+    $error = "";
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['usuario']) && !empty($_POST['password'])) {
+        try {
+            $hash = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
+            $stmt = $db->prepare("INSERT INTO usuarios (nombre_completo, usuario, password, rol_id, estado) VALUES (?, ?, ?, ?, 1)");
+            $stmt->execute([
+                trim($_POST['nombre_completo']),
+                trim($_POST['usuario']),
+                $hash,
+                $_POST['rol_id']
+            ]);
+            header("Location: index.php?action=usuarios_gestion");
+            exit;
+        } catch (Exception $e) {
+            $error = "❌ Error: Es posible que el nombre de usuario de inicio de sesión ya exista.";
+        }
+    }
+
+    // Traemos los usuarios con el nombre de su rol
+    $listaUsuarios = $db->query("SELECT u.*, r.nombre as rol_nombre 
+                                 FROM usuarios u 
+                                 LEFT JOIN roles r ON u.rol_id = r.id 
+                                 ORDER BY r.id ASC, u.nombre_completo ASC")->fetchAll();
+    
+    // Traemos los roles para el formulario
+    $listaRoles = $db->query("SELECT id, nombre FROM roles ORDER BY id ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/usuarios_gestion.php';
+    exit;
+}
+
+// 2. EDICIÓN
+if (isset($_GET['action']) && $_GET['action'] === 'editar_usuario' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    $error = "";
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['id']) && !empty($_POST['usuario'])) {
+        try {
+            if (!empty($_POST['password'])) {
+                // Si escribió una clave nueva, la encriptamos y la actualizamos
+                $hash = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
+                $stmt = $db->prepare("UPDATE usuarios SET nombre_completo = ?, usuario = ?, password = ?, rol_id = ?, estado = ? WHERE id = ?");
+                $stmt->execute([trim($_POST['nombre_completo']), trim($_POST['usuario']), $hash, $_POST['rol_id'], $_POST['estado'], $_POST['id']]);
+            } else {
+                // Si la dejó en blanco, actualizamos todo MENOS la contraseña
+                $stmt = $db->prepare("UPDATE usuarios SET nombre_completo = ?, usuario = ?, rol_id = ?, estado = ? WHERE id = ?");
+                $stmt->execute([trim($_POST['nombre_completo']), trim($_POST['usuario']), $_POST['rol_id'], $_POST['estado'], $_POST['id']]);
+            }
+            header("Location: index.php?action=usuarios_gestion");
+            exit;
+        } catch (Exception $e) {
+            $error = "❌ Error: El nombre de usuario ya está en uso.";
+        }
+    }
+
+    $stmt = $db->prepare("SELECT * FROM usuarios WHERE id = ?");
+    $stmt->execute([$_GET['id']]);
+    $usuario_editar = $stmt->fetch();
+    
+    $listaRoles = $db->query("SELECT id, nombre FROM roles ORDER BY id ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/editar_usuario.php';
+    exit;
+}
+
+// 3. ELIMINACIÓN
+if (isset($_GET['action']) && $_GET['action'] === 'eliminar_usuario' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    
+    try {
+        // Evitamos que el admin se borre a sí mismo por accidente
+        if ($_GET['id'] == $_SESSION['usuario_id']) {
+            die("<div style='padding:20px; font-family:Arial;'><h3>❌ Error</h3><p>No podés eliminar tu propio usuario mientras estás en sesión.</p><a href='index.php?action=usuarios_gestion'>Volver atrás</a></div>");
+        }
+
+        $stmt = $db->prepare("DELETE FROM usuarios WHERE id = ?");
+        $stmt->execute([$_GET['id']]);
+    } catch (Exception $e) {
+        die("<div style='padding:20px; font-family:Arial;'><h3>❌ Error</h3><p>No se puede eliminar este usuario porque ya tiene registros de conteos asociados. Recomendación: Editalo y cambiale el Estado a 'Inactivo'.</p><a href='index.php?action=usuarios_gestion'>Volver atrás</a></div>");
+    }
+    
+    header("Location: index.php?action=usuarios_gestion");
+    exit;
+}
+// ==========================================
+// ==========================================
+// MÓDULO: SUB-MENÚ DE GRÁFICOS Y ACTAS
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'menu_graficos') {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    require_once __DIR__ . '/../src/Application/Views/menu_graficos.php';
+    exit;
+}
+// ==========================================
+// MÓDULO: CIERRE DE ACTAS (EVALUACIÓN CLIENTE)
+// ==========================================
+
+// 1. EL ENCARGADO GENERA EL ACTA (Botón en el Monitor)
+if (isset($_GET['action']) && $_GET['action'] === 'generar_acta' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    
+    $local_id = intval($_GET['local_id']);
+    $encargado_id = $_SESSION['usuario_id'];
+    $token = bin2hex(random_bytes(16)); // Llave secreta
+    
+    $stmt = $db->prepare("INSERT INTO evaluaciones (local_id, encargado_id, token_seguridad) VALUES (?, ?, ?)");
+    $stmt->execute([$local_id, $encargado_id, $token]);
+    
+    header("Location: index.php?action=evaluacion_cliente&token=" . $token);
+    exit;
+}
+
+// 2. LA PANTALLA MODO KIOSCO Y EL PROCESAMIENTO
+if (isset($_GET['action']) && $_GET['action'] === 'evaluacion_cliente') {
+    $db = (new Database())->getConnection();
+    $token = $_GET['token'] ?? '';
+    
+    $stmt = $db->prepare("SELECT e.*, l.nombre as local_nombre FROM evaluaciones e JOIN locales l ON e.local_id = l.id WHERE e.token_seguridad = ?");
+    $stmt->execute([$token]);
+    $evaluacion = $stmt->fetch();
+    
+    if (!$evaluacion) { die("<h2 style='text-align:center; margin-top:50px; font-family:Arial;'>❌ Error: Acta inválida.</h2>"); }
+    
+    // Si el ticket ya fue quemado
+    if ($evaluacion['completada'] == 1) {
+        die("<div style='text-align:center; margin-top:50px; font-family:Arial;'>
+                <h2>✔️ Acta Cerrada</h2>
+                <p>Este documento ya fue firmado y enviado de forma confidencial.</p>
+                <a href='index.php?action=dashboard' style='padding:10px 20px; background:#00897b; color:white; text-decoration:none; border-radius:5px;'>Volver al Sistema</a>
+             </div>");
+    }
+
+    // Si viene el POST del formulario con la firma
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['firma'])) {
+        $stmt = $db->prepare("UPDATE evaluaciones SET 
+            nombre_evaluador = ?, 
+            estrellas_puntualidad = ?, 
+            estrellas_organizacion = ?, 
+            estrellas_prolijidad = ?, 
+            estrellas_trato = ?, 
+            comentario = ?, 
+            firma_base64 = ?, 
+            completada = 1, 
+            fecha_cierre = CURRENT_TIMESTAMP 
+            WHERE id = ?");
+            
+        $stmt->execute([
+            trim($_POST['nombre_evaluador']),
+            intval($_POST['est_puntualidad']), 
+            intval($_POST['est_organizacion']),
+            intval($_POST['est_prolijidad']), 
+            intval($_POST['est_trato']),
+            trim($_POST['comentario']), 
+            $_POST['firma'], 
+            $evaluacion['id']
+        ]);
+        
+        header("Location: index.php?action=evaluacion_exito");
+        exit;
+    }
+    
+    // Prohibir al navegador guardar la pantalla para que no puedan volver atrás
+    header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+    require_once __DIR__ . '/../src/Application/Views/evaluacion_cliente.php';
+    exit;
+}
+
+// 3. PANTALLA DE ÉXITO
+if (isset($_GET['action']) && $_GET['action'] === 'evaluacion_exito') {
+    die("<div style='text-align:center; margin-top:50px; font-family:Arial;'>
+            <h1 style='color:#2e7d32; font-size:60px; margin-bottom:10px;'>✔️</h1>
+            <h2>Acta Conformada con Éxito</h2>
+            <p>Muchas gracias. Los datos han sido encriptados y enviados a la administración.</p>
+            <p style='color:#d32f2f; font-weight:bold;'>Por favor, devuelva el dispositivo al encargado de MACARO.</p>
+            <br><br>
+            <a href='index.php?action=dashboard' style='padding:15px 30px; background:#666; color:white; text-decoration:none; border-radius:8px; font-weight:bold;'>Salir al Menú Principal</a>
+         </div>");
+}
+// 4. RANKING DE PIQUEADORES
+if (isset($_GET['action']) && $_GET['action'] === 'ranking_piqueadores') {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
+    // Consultamos el total de ítems y zonas en la tabla CORRECTA: 'conteos'
+    $query = "SELECT 
+                u.nombre_completo, 
+                SUM(c.cantidad) as total_articulos, 
+                COUNT(DISTINCT c.zona_id) as total_zonas 
+              FROM usuarios u 
+              LEFT JOIN conteos c ON u.id = c.usuario_id 
+              WHERE u.rol_id = 3 
+              GROUP BY u.id 
+              ORDER BY total_articulos DESC";
+    
+    $ranking = $db->query($query)->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/ranking_piqueadores.php';
+    exit;
+}
+// ==========================================
+// ==========================================
+// MÓDULO: CALENDARIO DE AUDITORÍAS (CON SINCRONIZACIÓN)
+// ==========================================
+
+// --- ACCIÓN A: CARGAR EL CALENDARIO ---
+if (isset($_GET['action']) && $_GET['action'] === 'calendario') {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
+    // En el calendario mostramos TODOS los locales para poder reactivarlos si hace falta
+    $locales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre")->fetchAll();
+    $encargados = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id = 2 AND estado = 1 ORDER BY nombre_completo")->fetchAll();
+
+    $eventos_db = $db->query("
+        SELECT ap.id, ap.fecha_auditoria, ap.hora_auditoria, ap.local_id, ap.encargado_id, 
+               l.nombre as local_nombre, u.nombre_completo as encargado_nombre, ap.estado
+        FROM auditorias_programadas ap
+        JOIN locales l ON ap.local_id = l.id
+        JOIN usuarios u ON ap.encargado_id = u.id
+        ORDER BY ap.fecha_auditoria DESC
+    ")->fetchAll();
+
+    $eventos_js = [];
+    foreach($eventos_db as $e) {
+        $color = '#2196f3'; 
+        if($e['estado'] === 'Completada') $color = '#4caf50';
+        if($e['estado'] === 'Cancelada') $color = '#f44336';
+
+        $eventos_js[] = [
+            'id'    => $e['id'],
+            'title' => $e['local_nombre'] . " (" . $e['encargado_nombre'] . ")",
+            'start' => $e['fecha_auditoria'] . 'T' . $e['hora_auditoria'],
+            'backgroundColor' => $color,
+            'borderColor' => $color
+        ];
+    }
+    require_once __DIR__ . '/../src/Application/Views/calendario.php';
+    exit;
+}
+
+// --- ACCIÓN B: GUARDAR NUEVA (Sincroniza Local a Activo) ---
+if (isset($_GET['action']) && $_GET['action'] === 'guardar_auditoria') {
+    $db = (new Database())->getConnection();
+    $local_id = intval($_POST['local_id']);
+    
+    $stmt = $db->prepare("INSERT INTO auditorias_programadas (local_id, encargado_id, fecha_auditoria, hora_auditoria, estado) VALUES (?, ?, ?, ?, 'Pendiente')");
+    $stmt->execute([$local_id, intval($_POST['encargado_id']), $_POST['fecha'], $_POST['hora']]);
+    
+    // Al agendar, el local se pone en estado 1 (Visible)
+    $db->prepare("UPDATE locales SET estado = 1 WHERE id = ?")->execute([$local_id]);
+    
+    header("Location: index.php?action=calendario&res=creado");
+    exit;
+}
+
+// --- ACCIÓN C: ACTUALIZAR EXISTENTE (Sincroniza según el Estado) ---
+if (isset($_GET['action']) && $_GET['action'] === 'actualizar_auditoria') {
+    $db = (new Database())->getConnection();
+    $local_id = intval($_POST['local_id']);
+    $estado_cal = $_POST['estado'];
+
+    $stmt = $db->prepare("UPDATE auditorias_programadas SET local_id = ?, encargado_id = ?, fecha_auditoria = ?, hora_auditoria = ?, estado = ? WHERE id = ?");
+    $stmt->execute([$local_id, intval($_POST['encargado_id']), $_POST['fecha'], $_POST['hora'], $estado_cal, intval($_POST['auditoria_id'])]);
+    
+    // Si es Pendiente -> Local Visible (1). Si no -> Local Oculto (0)
+    $estado_local = ($estado_cal === 'Pendiente') ? 1 : 0;
+    $db->prepare("UPDATE locales SET estado = ? WHERE id = ?")->execute([$estado_local, $local_id]);
+    
+    header("Location: index.php?action=calendario&res=editado");
+    exit;
+}
+
+// --- ACCIÓN D: CANCELAR (Sincroniza Local a Oculto) ---
+if (isset($_GET['action']) && $_GET['action'] === 'cancelar_auditoria') {
+    $db = (new Database())->getConnection();
+    $id = intval($_GET['id']);
+    
+    $stmt = $db->prepare("SELECT local_id FROM auditorias_programadas WHERE id = ?");
+    $stmt->execute([$id]);
+    $auditoria = $stmt->fetch();
+    
+    if($auditoria) {
+        $db->prepare("UPDATE locales SET estado = 0 WHERE id = ?")->execute([$auditoria['local_id']]);
+        $db->prepare("UPDATE auditorias_programadas SET estado = 'Cancelada' WHERE id = ?")->execute([$id]);
+    }
+    
+    header("Location: index.php?action=calendario&res=cancelado");
+    exit;
+}
 // ==========================================
 //  LOGIN Y PANEL PRINCIPAL
 // ==========================================

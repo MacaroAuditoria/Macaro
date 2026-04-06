@@ -18,20 +18,43 @@
         .info-panel { background: #1e1e1e; padding: 15px; font-size: 14px; border-bottom: 1px solid #444; color: #aaa; }
         .info-panel span { display: block; margin-bottom: 5px; }
         
-        .scanner-area { padding: 20px; }
-        .input-group { display: flex; gap: 10px; align-items: stretch; margin-bottom: 20px;}
+        /* --- AJUSTES DE CENTRADO AQUÍ --- */
+        .scanner-area { 
+            padding: 20px; 
+            max-width: 400px; /* Evita que se estire demasiado en pantallas más grandes */
+            margin: 0 auto; /* Centra todo el bloque en la pantalla */
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Centra los elementos internos */
+        }
         
-        .input-barcode { flex: 1; padding: 15px; font-size: 24px; font-weight: bold; border: none; border-radius: 5px; background: #fff; text-align: center; }
-        .input-qty { width: 80px; padding: 15px; font-size: 24px; font-weight: bold; border: none; border-radius: 5px; text-align: center; background: #e0e0e0; color: #555; }
+        #scanForm {
+            width: 100%; /* El formulario usa el 100% del espacio centrado */
+        }
         
-        .btn-lock { background: #444; border: none; color: white; padding: 15px; font-size: 20px; border-radius: 5px; cursor: pointer; }
+        .input-group { 
+            display: flex; 
+            gap: 10px; 
+            justify-content: center; /* Centra el input y el botón horizontalmente */
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        /* -------------------------------- */
+        
+        .input-barcode { width: 100%; padding: 15px; font-size: 24px; font-weight: bold; border: none; border-radius: 5px; background: #fff; text-align: center; box-sizing: border-box; }
+        .input-qty { width: 100px; padding: 15px; font-size: 24px; font-weight: bold; border: none; border-radius: 5px; text-align: center; background: #e0e0e0; color: #555; }
+        
+        .btn-lock { background: #444; border: none; color: white; padding: 15px; font-size: 20px; border-radius: 5px; cursor: pointer; min-width: 60px; }
         .btn-lock.unlocked { background: #ff9800; color: black; }
         
-        .success-card { background: #004d40; padding: 15px; border-radius: 5px; border-left: 5px solid #00bfa5; margin-bottom: 20px; font-size: 16px;}
-        .error-card { background: #b71c1c; padding: 15px; border-radius: 5px; border-left: 5px solid #ff5252; margin-bottom: 20px; font-size: 16px; font-weight: bold;}
+        .success-card { background: #004d40; padding: 15px; border-radius: 5px; border-left: 5px solid #00bfa5; margin-bottom: 20px; font-size: 16px; width: 100%; box-sizing: border-box;}
+        .error-card { background: #b71c1c; padding: 15px; border-radius: 5px; border-left: 5px solid #ff5252; margin-bottom: 20px; font-size: 16px; font-weight: bold; width: 100%; box-sizing: border-box;}
         
-        .total-box { text-align: center; font-size: 20px; margin-top: 30px; color: #00e676; }
+        .total-box { text-align: center; font-size: 20px; margin-top: 30px; color: #00e676; width: 100%; }
         .total-box span { font-size: 36px; font-weight: bold; display: block; }
+        
+        /* Centrar los textos de arriba de las cajas */
+        .etiqueta-centrada { color: #aaa; font-size: 12px; margin-bottom: 5px; display:block; text-align: center; font-weight: bold; letter-spacing: 1px; }
     </style>
 </head>
 <body>
@@ -63,12 +86,12 @@
     <?php echo $mensaje_estado; ?>
 
     <form method="POST" action="index.php?action=piqueo_escaner" id="scanForm">
-        <label style="color: #aaa; font-size: 12px; margin-bottom: 5px; display:block;">CÓDIGO DE BARRAS</label>
+        <label class="etiqueta-centrada">CÓDIGO DE BARRAS</label>
         <div class="input-group">
             <input type="text" name="codigo_barras" id="codigo" class="input-barcode" required autocomplete="off">
         </div>
 
-        <label style="color: #aaa; font-size: 12px; margin-bottom: 5px; display:block;">CANTIDAD</label>
+        <label class="etiqueta-centrada">CANTIDAD</label>
         <div class="input-group">
             <input type="number" step="0.01" name="cantidad" id="cantidad" class="input-qty" value="1" readonly>
             <button type="button" id="lockBtn" class="btn-lock">🔒</button>

@@ -99,6 +99,16 @@
                 <?php endforeach; ?>
             </tbody>
         </table>
+        <!-- Agregá esto donde te quede más cómodo en tu diseño del monitor -->
+        <div style="text-align: center; margin: 20px 0; padding: 20px; background: #e8f5e9; border: 2px dashed #4caf50; border-radius: 8px;">
+            <h3 style="margin-top: 0; color: #2e7d32;">¿Finalizó la Auditoría?</h3>
+            <a href="index.php?action=generar_acta&local_id=<?php echo $local_id; ?>" 
+       class="btn-primario" 
+       style="background: #1b5e20; font-size: 18px; padding: 15px 30px;"
+       onclick="return confirm('ATENCIÓN: Esto bloqueará el sistema y abrirá el Acta para que firme el cliente. ¿Desea continuar?')">
+       📝 Generar Cierre de Actas
+    </a>
+</div>
     </div>
 <?php endif; ?>
 
