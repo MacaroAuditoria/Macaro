@@ -11,7 +11,6 @@
     <div class="user-info">📂 Módulo de Catálogo</div>
     <div>
         <a href="index.php" class="btn-primario" style="text-decoration: none; padding: 10px 15px; background: #6c757d; margin-right: 10px;">Volver al Inicio</a>
-        <a href="?action=logout" class="logout-btn">Salir</a>
     </div>
 </div>
 

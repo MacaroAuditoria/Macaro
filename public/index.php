@@ -201,8 +201,7 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_v
         // En vez de: SELECT id, nombre FROM locales
         // Tiene que ser:
         $locales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre")->fetchAll();
-        $encargados = $db->query("SELECT id, nombre_completo FROM usuarios ORDER BY nombre_completo")->fetchAll();
-
+       $encargados = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id = 2 AND estado = 1 ORDER BY nombre_completo")->fetchAll();
         require_once __DIR__ . '/../src/Application/Views/actas_buscar.php';
         exit;
     }
@@ -251,13 +250,17 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_v
 // ==========================================
 // MÓDULO: MONITOR DE AUDITORÍA (ENCARGADOS)
 // ==========================================
+// GESTIÓN DEL MONITOR DE ZONAS
 
+
+ 
 // 1. VER EL MONITOR PRINCIPAL
-if (isset($_GET['action']) && $_GET['action'] === 'monitor_zonas' && isset($_SESSION['usuario_id'])) {
+if (isset($_GET['action']) && $_GET['action'] === 'monitor_zonas') {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
-    
     $db = (new Database())->getConnection();
-    $locales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre ASC")->fetchAll();
+
+    // AQUÍ TAMBIÉN AGREGAMOS EL FILTRO
+    $locales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre")->fetchAll();
     $sectores = $db->query("SELECT id, nombre FROM sectores ORDER BY nombre ASC")->fetchAll();
     
     $local_id = isset($_GET['local_id']) ? $_GET['local_id'] : null;
@@ -356,7 +359,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_vaciar_zona' && isset
 // MÓDULO DE PIQUEO (ZEBRA TC21)
 // ==========================================
 
-// 1. Pantalla de Configuración
+// 1. Pantalla de Configuración (Elegir Local, Sector y Zona)
 if (isset($_GET['action']) && $_GET['action'] === 'piqueo_config' && isset($_SESSION['usuario_id'])) {
     $db = (new Database())->getConnection();
     $error = "";
@@ -365,42 +368,95 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_config' && isset($_SES
         $local = $_POST['local_id'];
         $sector = !empty($_POST['sector_id']) ? $_POST['sector_id'] : null;
         $zona = $_POST['zona_id'];
+        $usuario_actual = $_SESSION['usuario_id'];
 
-        // Revisamos cómo está el candado de esta zona en la base de datos
-        $check_estado = $db->prepare("SELECT estado, usuario_id FROM zonas_cerradas WHERE local_id = ? AND sector_id <=> ? AND zona_id = ?");
-        $check_estado->execute([$local, $sector, $zona]);
-        $estado_zona = $check_estado->fetch();
-        
-        if ($estado_zona) {
-            if ($estado_zona['estado'] === 'cerrada') {
-                $error = "❌ Esa Zona ya fue completada y cerrada en este Sector.";
-            } elseif ($estado_zona['estado'] === 'en_uso' && $estado_zona['usuario_id'] != $_SESSION['usuario_id']) {
-                // CONDICIÓN CUMPLIDA: Mensaje rojo y no lo deja pasar
-                $error = "❌ Esta zona se encuentra ABIERTA y en uso por otro operario.";
+        // MAGIA ANTI-FANTASMAS
+        $stmt_abierta = $db->prepare("
+            SELECT zc.local_id, zc.sector_id, zc.zona_id, l.nombre as local_nom, s.nombre as sector_nom, z.codigo as zona_cod
+            FROM zonas_cerradas zc
+            JOIN locales l ON zc.local_id = l.id
+            LEFT JOIN sectores s ON zc.sector_id = s.id
+            JOIN zonas z ON zc.zona_id = z.id
+            WHERE zc.usuario_id = ? AND zc.estado = 'en_uso'
+        ");
+        $stmt_abierta->execute([$usuario_actual]);
+        $zona_en_uso = $stmt_abierta->fetch();
+
+        $bloquear_acceso = false;
+
+        if ($zona_en_uso) {
+            if ($zona_en_uso['local_id'] != $local || $zona_en_uso['sector_id'] != $sector || $zona_en_uso['zona_id'] != $zona) {
+                $bloquear_acceso = true; 
+                
+                $nombre_lugar = htmlspecialchars($zona_en_uso['local_nom']);
+                if ($zona_en_uso['sector_nom']) $nombre_lugar .= " - " . htmlspecialchars($zona_en_uso['sector_nom']);
+                $nombre_lugar .= " - Zona " . htmlspecialchars($zona_en_uso['zona_cod']);
+
+                // ---> CORRECCIÓN DE LA TRAMPA: Recuperar el inicio original de Carlos
+                $start_id_existente = isset($_SESSION['piqueo']['start_id']) ? $_SESSION['piqueo']['start_id'] : 0;
+                if ($start_id_existente === 0) {
+                    $stmt_min = $db->prepare("SELECT MIN(id) FROM conteos WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND usuario_id = ?");
+                    $stmt_min->execute([$zona_en_uso['local_id'], $zona_en_uso['sector_id'], $zona_en_uso['zona_id'], $usuario_actual]);
+                    $min_id = $stmt_min->fetchColumn();
+                    $start_id_existente = $min_id ? ($min_id - 1) : 0;
+                }
+
+                $_SESSION['piqueo'] = [
+                    'local_id' => $zona_en_uso['local_id'], 
+                    'sector_id' => $zona_en_uso['sector_id'], 
+                    'zona_id' => $zona_en_uso['zona_id'], 
+                    'start_id' => $start_id_existente
+                ];
+
+                $error = "
+                    <div style='background: #b71c1c; padding: 20px; border-radius: 8px; color: white; text-align: center; margin-bottom: 20px; border: 2px solid #ff5252;'>
+                        <h3 style='margin-top:0;'>⚠️ ACCIÓN DENEGADA</h3>
+                        <p>Ya tienes una zona abierta y sin terminar:</p>
+                        <p style='font-size: 18px; font-weight: bold; color: #ffeb3b;'>{$nombre_lugar}</p>
+                        <p style='font-size: 14px; margin-bottom: 15px;'>Debes volver a esa zona y elegir 'Terminar' o 'Salir sin bloquear' antes de abrir una nueva.</p>
+                        <a href='index.php?action=piqueo_escaner' style='display: block; background: #ff9800; color: #000; padding: 15px 20px; font-size: 18px; font-weight: bold; text-decoration: none; border-radius: 5px; width: 100%; box-sizing: border-box;'>Ir a mi zona abierta ➔</a>
+                    </div>
+                ";
+            }
+        }
+
+        if (!$bloquear_acceso) {
+            $check_estado = $db->prepare("SELECT estado, usuario_id FROM zonas_cerradas WHERE local_id = ? AND sector_id <=> ? AND zona_id = ?");
+            $check_estado->execute([$local, $sector, $zona]);
+            $estado_zona = $check_estado->fetch();
+            
+            if ($estado_zona) {
+                if ($estado_zona['estado'] === 'cerrada') {
+                    $error = "❌ Esa Zona ya fue completada y cerrada por un operario.";
+                } elseif ($estado_zona['estado'] === 'en_uso' && $estado_zona['usuario_id'] != $usuario_actual) {
+                    $error = "❌ Esta zona se encuentra ABIERTA y en uso por otro operario.";
+                } else {
+                    // ---> CORRECCIÓN DE LA TRAMPA: Recuperar su inicio si vuelve legítimamente
+                    $start_id_existente = isset($_SESSION['piqueo']['start_id']) ? $_SESSION['piqueo']['start_id'] : 0;
+                    if ($start_id_existente === 0) {
+                        $stmt_min = $db->prepare("SELECT MIN(id) FROM conteos WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND usuario_id = ?");
+                        $stmt_min->execute([$local, $sector, $zona, $usuario_actual]);
+                        $min_id = $stmt_min->fetchColumn();
+                        $start_id_existente = $min_id ? ($min_id - 1) : 0;
+                    }
+                    $_SESSION['piqueo'] = ['local_id' => $local, 'sector_id' => $sector, 'zona_id' => $zona, 'start_id' => $start_id_existente];
+                    header("Location: index.php?action=piqueo_escaner"); exit;
+                }
             } else {
-                // Si el estado es "en_uso" pero el ID es el del mismo usuario, lo dejamos volver a entrar
+                $stmt_uso = $db->prepare("INSERT INTO zonas_cerradas (local_id, sector_id, zona_id, usuario_id, estado) VALUES (?, ?, ?, ?, 'en_uso')");
+                $stmt_uso->execute([$local, $sector, $zona, $usuario_actual]);
+                
                 $max_id = $db->query("SELECT MAX(id) FROM conteos")->fetchColumn();
                 $_SESSION['piqueo'] = ['local_id' => $local, 'sector_id' => $sector, 'zona_id' => $zona, 'start_id' => $max_id ? $max_id : 0];
                 header("Location: index.php?action=piqueo_escaner"); exit;
             }
-        } else {
-            // EL CANDADO INVISIBLE: La zona está libre. La marcamos como "en_uso" en el momento de darle Comenzar.
-            $stmt_uso = $db->prepare("INSERT INTO zonas_cerradas (local_id, sector_id, zona_id, usuario_id, estado) VALUES (?, ?, ?, ?, 'en_uso')");
-            $stmt_uso->execute([$local, $sector, $zona, $_SESSION['usuario_id']]);
-            
-            $max_id = $db->query("SELECT MAX(id) FROM conteos")->fetchColumn();
-            $_SESSION['piqueo'] = ['local_id' => $local, 'sector_id' => $sector, 'zona_id' => $zona, 'start_id' => $max_id ? $max_id : 0];
-            header("Location: index.php?action=piqueo_escaner"); exit;
         }
     }
 
-    $locales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre ASC")->fetchAll();
+    $locales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
     $sectores = $db->query("SELECT id, nombre FROM sectores ORDER BY nombre ASC")->fetchAll();
-    
-    // NUEVO: Traemos las zonas con sus dueños (local_id y sector_id)
     $zonas_db = $db->query("SELECT id, codigo, local_id, sector_id FROM zonas ORDER BY codigo ASC")->fetchAll(PDO::FETCH_ASSOC);
     $json_todas_las_zonas = json_encode($zonas_db);
-    
     $zonas_cerradas = $db->query("SELECT local_id, sector_id, zona_id FROM zonas_cerradas WHERE estado = 'cerrada'")->fetchAll(PDO::FETCH_ASSOC);
     $json_cerradas = json_encode($zonas_cerradas);
     
@@ -408,9 +464,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_config' && isset($_SES
     exit;
 }
 
-// 2. Pantalla de Batalla (Escáner)
+// ==========================================
+// 2. PANTALLA DE BATALLA (ESCÁNER)
+// ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SESSION['usuario_id'])) {
-    if (!isset($_SESSION['piqueo'])) { header("Location: index.php?action=piqueo_config"); exit; }
+    
+    // --- ESCUDO ANTI-BOTÓN ATRÁS ---
+    // Si la sesión no existe, significa que hizo trampa con el navegador. Lo echamos al menú.
+    if (!isset($_SESSION['piqueo'])) {
+        header("Location: index.php?action=piqueo_config");
+        exit;
+    }
+    // -------------------------------
     
     $db = (new Database())->getConnection();
     $alerta_sonido = false;
@@ -420,8 +485,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
         $codigo = trim(strtoupper($_POST['codigo_barras'])); // Lo pasamos a mayúsculas por si acaso
         $cantidad = !empty($_POST['cantidad']) ? $_POST['cantidad'] : 1;
 
-       // 1. ¿ES UN CÓDIGO DE ZONA? (SALTO MÁGICO CON CONFIRMACIÓN)
-        // Busca la zona asegurando que pertenezca al local/sector en el que estoy parado
+        // 1. ¿ES UN CÓDIGO DE ZONA? (SALTO MÁGICO CON CONFIRMACIÓN)
         $check_zona = $db->prepare("SELECT id, codigo FROM zonas WHERE codigo = ? AND (local_id = ? OR local_id IS NULL) AND (sector_id <=> ? OR sector_id IS NULL) LIMIT 1");
         $check_zona->execute([$codigo, $_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id']]);
         $zona_escaneada = $check_zona->fetch();
@@ -444,15 +508,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
                     $alerta_sonido = true;
                     $mensaje_estado = "<div class='error-card'>❌ La zona {$zona_escaneada['codigo']} está en uso por otro.</div>";
                 } else {
-                    // LA MAGIA DE LA CONFIRMACIÓN: Le mostramos una tarjeta amarilla con dos botones
-                    $alerta_sonido = true; // Hacemos que suene para que mire la pantalla
+                    // LA MAGIA DE LA CONFIRMACIÓN
+                    $alerta_sonido = true; 
                     $mensaje_estado = "
                     <div style='background: #ffb300; padding: 15px; border-radius: 5px; border-left: 5px solid #f57c00; margin-bottom: 20px; color: #000;'>
                         <div style='font-size: 18px; font-weight: bold; margin-bottom: 10px;'>⚠️ ¿Cambiar de Zona?</div>
                         <p style='margin: 0 0 15px 0; font-size: 15px;'>Escaneaste la zona <strong>{$zona_escaneada['codigo']}</strong>. ¿Querés terminar la actual y saltar a esta?</p>
                         <div style='display: flex; gap: 10px;'>
                             <a href='index.php?action=piqueo_escaner' style='flex: 1; padding: 15px; text-align: center; background: #fff; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; border: 1px solid #ccc;'>Cancelar</a>
-                            
                             <a href='index.php?action=piqueo_ejecutar_salto&zona_id={$nueva_zona_id}' style='flex: 1; padding: 15px; text-align: center; background: #d32f2f; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;'>SÍ, SALTAR</a>
                         </div>
                     </div>";
@@ -495,7 +558,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
         }
     }
 
-    // NUEVO: Atrapamos el mensaje si acaba de saltar de zona
+    // Atrapamos el mensaje si acaba de saltar de zona
     if (isset($_GET['jump'])) {
         $mensaje_estado = "<div class='success-card' style='background: #1565c0; border-left-color: #64b5f6;'>🚀 Salto exitoso. ¡Bienvenido a la Zona " . htmlspecialchars($_GET['jump']) . "!</div>";
     }
@@ -507,7 +570,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
         $sector_nombre = $db->query("SELECT nombre FROM sectores WHERE id = " . $_SESSION['piqueo']['sector_id'])->fetchColumn();
     }
     
-    // --- NUEVO CÁLCULO DEL TOTAL (Aislado por Local, Zona Y Sector) ---
+    // --- CÁLCULO DEL TOTAL ---
     $stmt_total = $db->prepare("SELECT SUM(c.cantidad) FROM conteos c 
                                 INNER JOIN productos p ON c.codigo_barras = p.codigo_barras 
                                 WHERE c.zona_id = ? AND c.local_id = ? AND c.sector_id <=> ?");
@@ -519,27 +582,38 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
     
     $total_zona = $stmt_total->fetchColumn();
     $total_zona = $total_zona ? number_format($total_zona, 2, '.', '') : "0.00";
-    // ------------------------------------------------------------------
 
     require_once __DIR__ . '/../src/Application/Views/piqueo_escaner.php';
     exit;
 }
 
 // 3. NUEVA RUTA: SALIR SIN GUARDAR (CON LIMPIEZA POR CHECKPOINT)
-if (isset($_GET['action']) && $_GET['action'] === 'piqueo_salir_zona' && isset($_SESSION['usuario_id'])) {
-    if (isset($_SESSION['piqueo'])) {
-        $db = (new Database())->getConnection();
-        
-        // 1. Borramos la basura escaneada
-        $stmt = $db->prepare("DELETE FROM conteos WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND usuario_id = ? AND id > ?");
-        $stmt->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $_SESSION['usuario_id'], $_SESSION['piqueo']['start_id']]);
-        
-        // 2. ROMPEMOS EL CANDADO INVISIBLE para que quede libre otra vez
-        $stmt_unlock = $db->prepare("DELETE FROM zonas_cerradas WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND usuario_id = ? AND estado = 'en_uso'");
-        $stmt_unlock->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $_SESSION['usuario_id']]);
-        
-        unset($_SESSION['piqueo']);
-    }
+// ==========================================
+// ACCIÓN: SALIR SIN BLOQUEAR (Y BORRAR EL ERROR)
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'piqueo_salir_zona' && isset($_SESSION['piqueo'])) {
+    $db = (new Database())->getConnection();
+    
+    $local = $_SESSION['piqueo']['local_id'];
+    $sector = $_SESSION['piqueo']['sector_id'];
+    $zona = $_SESSION['piqueo']['zona_id'];
+    $usuario = $_SESSION['usuario_id'];
+    
+    // Acá está la magia: El ID exacto en el que Carlos empezó a trabajar
+    $start_id = $_SESSION['piqueo']['start_id'];
+
+    // 1. ELIMINAMOS EL RASTRO: Borramos solo lo que Carlos escaneó en esta "sesión" de error
+    $stmt_borrar = $db->prepare("DELETE FROM conteos WHERE id > ? AND local_id = ? AND sector_id <=> ? AND zona_id = ? AND usuario_id = ?");
+    $stmt_borrar->execute([$start_id, $local, $sector, $zona, $usuario]);
+
+    // 2. LIBERAMOS LA ZONA: Le sacamos la etiqueta de 'en_uso' para que otro pueda entrar
+    $stmt_liberar = $db->prepare("DELETE FROM zonas_cerradas WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND usuario_id = ? AND estado = 'en_uso'");
+    $stmt_liberar->execute([$local, $sector, $zona, $usuario]);
+
+    // 3. LIMPIAMOS AL USUARIO: Le sacamos la zona asignada para que pueda elegir una nueva
+    unset($_SESSION['piqueo']);
+    
+    // Lo mandamos de vuelta al menú de zonas
     header("Location: index.php?action=piqueo_config");
     exit;
 }
@@ -1232,21 +1306,19 @@ if (isset($_GET['action']) && $_GET['action'] === 'calendario') {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
 
-    // En el calendario mostramos TODOS los locales para poder reactivarlos si hace falta
     $locales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre")->fetchAll();
     $encargados = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id = 2 AND estado = 1 ORDER BY nombre_completo")->fetchAll();
 
-    $eventos_db = $db->query("
-        SELECT ap.id, ap.fecha_auditoria, ap.hora_auditoria, ap.local_id, ap.encargado_id, 
-               l.nombre as local_nombre, u.nombre_completo as encargado_nombre, ap.estado
+    // 1. DATOS PARA PINTAR EL CALENDARIO VISUAL (Todos)
+    $eventos_calendario = $db->query("
+        SELECT ap.id, ap.fecha_auditoria, ap.hora_auditoria, l.nombre as local_nombre, u.nombre_completo as encargado_nombre, ap.estado
         FROM auditorias_programadas ap
         JOIN locales l ON ap.local_id = l.id
         JOIN usuarios u ON ap.encargado_id = u.id
-        ORDER BY ap.fecha_auditoria DESC
     ")->fetchAll();
 
     $eventos_js = [];
-    foreach($eventos_db as $e) {
+    foreach($eventos_calendario as $e) {
         $color = '#2196f3'; 
         if($e['estado'] === 'Completada') $color = '#4caf50';
         if($e['estado'] === 'Cancelada') $color = '#f44336';
@@ -1259,6 +1331,35 @@ if (isset($_GET['action']) && $_GET['action'] === 'calendario') {
             'borderColor' => $color
         ];
     }
+
+    // 2. MATEMÁTICA PARA LA TABLA (Calcular Domingo a Sábado)
+    $hoy = new DateTime();
+    $diaSemana = $hoy->format('w'); // 0 es Domingo, 6 es Sábado
+    
+    $inicioSemana = clone $hoy;
+    $inicioSemana->modify("-{$diaSemana} days"); // Retrocede hasta el Domingo
+    $fecha_inicio = $inicioSemana->format('Y-m-d');
+    
+    $finSemana = clone $inicioSemana;
+    $finSemana->modify("+6 days"); // Avanza hasta el Sábado
+    $fecha_fin = $finSemana->format('Y-m-d');
+
+    // 3. DATOS SOLO PARA LA TABLA DE ABAJO (Filtrado por semana)
+    $stmt_tabla = $db->prepare("
+        SELECT ap.id, ap.fecha_auditoria, ap.hora_auditoria, ap.local_id, ap.encargado_id, 
+               l.nombre as local_nombre, u.nombre_completo as encargado_nombre, ap.estado
+        FROM auditorias_programadas ap
+        JOIN locales l ON ap.local_id = l.id
+        JOIN usuarios u ON ap.encargado_id = u.id
+        WHERE ap.fecha_auditoria BETWEEN ? AND ?
+        ORDER BY ap.fecha_auditoria ASC, ap.hora_auditoria ASC
+    ");
+    $stmt_tabla->execute([$fecha_inicio, $fecha_fin]);
+    $eventos_db = $stmt_tabla->fetchAll(); // Acá se pisa la variable para que la tabla solo use estos
+    
+    // Creamos un título bonito para mostrárselo al usuario
+    $titulo_semana = "Del " . $inicioSemana->format('d/m/Y') . " al " . $finSemana->format('d/m/Y');
+
     require_once __DIR__ . '/../src/Application/Views/calendario.php';
     exit;
 }

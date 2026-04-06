@@ -10,7 +10,7 @@
 
 <div class="header">
     <div class="user-info">📈 Análisis de Rendimiento</div>
-    <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver al Inicio</a>
+    <a href="index.php?action=menu_graficos" class="logout-btn" style="background:#666;">Volver</a>
 </div>
 
 <div class="container-abm">

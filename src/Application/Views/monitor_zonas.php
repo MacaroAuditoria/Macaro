@@ -19,7 +19,7 @@
 
 <div class="header">
     <div class="user-info">📊 Monitor de Zonas en Vivo</div>
-    <a href="index.php?action=dashboard" class="btn-primario" style="background: #6c757d; text-decoration:none;">Volver</a>
+    <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver</a>
 </div>
 
 <div class="filtro-caja">

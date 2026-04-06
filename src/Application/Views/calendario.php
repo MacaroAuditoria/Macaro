@@ -47,6 +47,22 @@
         .btn-accion:hover {
             opacity: 0.8;
         }
+        
+        /* Estilos del Buscador */
+        .barra-busqueda {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .barra-busqueda input, .barra-busqueda select {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .barra-busqueda input {
+            width: 250px;
+        }
     </style>
 </head>
 <body class="dashboard-container">
@@ -60,9 +76,23 @@
     
     <div id='calendar'></div>
 
-    <div class="card-table" style="margin-top: 40px; border-top: 4px solid #673ab7;">
-        <h3 style="margin-bottom: 15px; color: #333;">📋 Panel de Gestión de Auditorías</h3>
-        <table class="tabla-gestion">
+    <div class="card-table" style="margin-top: 40px; border-top: 4px solid #673ab7; padding: 20px;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+            <h3 style="margin: 0; color: #333;">📋 Auditorías de la semana <span style="font-size: 14px; color: #666; font-weight: normal;">(<?php echo $titulo_semana; ?>)</span></h3>
+            
+            <div class="barra-busqueda">
+                <input type="text" id="buscadorTexto" placeholder="🔍 Buscar por local o encargado...">
+                <select id="buscadorEstado">
+                    <option value="">Todos los Estados</option>
+                    <option value="Pendiente">Pendiente</option>
+                    <option value="Completada">Completada</option>
+                    <option value="Cancelada">Cancelada</option>
+                </select>
+            </div>
+        </div>
+
+        <table class="tabla-gestion" id="tablaAuditorias">
             <thead>
                 <tr>
                     <th>Fecha</th>
@@ -78,9 +108,9 @@
                 <tr>
                     <td><strong><?php echo date('d/m/Y', strtotime($e['fecha_auditoria'])); ?></strong></td>
                     <td><?php echo date('H:i', strtotime($e['hora_auditoria'])); ?></td>
-                    <td><?php echo htmlspecialchars($e['local_nombre']); ?></td>
-                    <td><?php echo htmlspecialchars($e['encargado_nombre']); ?></td>
-                    <td>
+                    <td class="col-local"><?php echo htmlspecialchars($e['local_nombre']); ?></td>
+                    <td class="col-encargado"><?php echo htmlspecialchars($e['encargado_nombre']); ?></td>
+                    <td class="col-estado">
                         <span class="estado-badge bg-<?php echo strtolower($e['estado']); ?>">
                             <?php echo $e['estado']; ?>
                         </span>
@@ -98,7 +128,7 @@
                 <?php endforeach; ?>
                 
                 <?php if(empty($eventos_db)): ?>
-                    <tr><td colspan="6" style="text-align:center; padding: 20px;">No hay auditorías registradas.</td></tr>
+                    <tr id="filaVacia"><td colspan="6" style="text-align:center; padding: 20px;">No hay auditorías registradas.</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>
@@ -106,7 +136,6 @@
 
 </div>
 
-<!-- Modal para Agendar -->
 <div class="modal-overlay" id="modalAgendar">
     <div class="modal-box">
         <h3>Agendar Nueva Auditoría</h3>
@@ -147,7 +176,6 @@
     </div>
 </div>
 
-<!-- Modal para Editar -->
 <div class="modal-overlay" id="modalEditar">
     <div class="modal-box" style="border-top: 4px solid #ff9800;">
         <h3>✏️ Editar Auditoría</h3>
@@ -201,6 +229,7 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // --- INICIALIZACIÓN DEL CALENDARIO ---
         var calendarEl = document.getElementById('calendar');
         var eventosDesdePHP = <?php echo json_encode($eventos_js); ?>;
 
@@ -228,8 +257,45 @@
         if (params.get('res') === 'creado') alert("✅ Auditoría agendada.");
         if (params.get('res') === 'editado') alert("✏️ Auditoría actualizada.");
         if (params.get('res') === 'cancelado') alert("❌ Auditoría cancelada.");
+
+        // --- LÓGICA DEL BUSCADOR EN VIVO ---
+        const inputBusqueda = document.getElementById('buscadorTexto');
+        const selectEstado = document.getElementById('buscadorEstado');
+        const filasTabla = document.querySelectorAll('#tablaAuditorias tbody tr');
+
+        function filtrarTabla() {
+            const texto = inputBusqueda.value.toLowerCase();
+            const estado = selectEstado.value.toLowerCase();
+
+            filasTabla.forEach(fila => {
+                // Si es la fila de "No hay auditorías", la ignoramos
+                if (fila.id === 'filaVacia') return;
+
+                // Obtenemos los textos de la fila
+                const nombreLocal = fila.querySelector('.col-local').textContent.toLowerCase();
+                const nombreEncargado = fila.querySelector('.col-encargado').textContent.toLowerCase();
+                const estadoLocal = fila.querySelector('.col-estado').textContent.toLowerCase().trim();
+
+                // Chequeamos si el texto coincide (buscamos en local o encargado)
+                const coincideTexto = nombreLocal.includes(texto) || nombreEncargado.includes(texto);
+                // Chequeamos si el estado coincide
+                const coincideEstado = (estado === "" || estadoLocal === estado);
+
+                // Mostramos u ocultamos la fila
+                if (coincideTexto && coincideEstado) {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            });
+        }
+
+        // Ejecutamos la función cada vez que escriben o cambian el estado
+        inputBusqueda.addEventListener('keyup', filtrarTabla);
+        selectEstado.addEventListener('change', filtrarTabla);
     });
 
+    // --- FUNCIONES DE VENTANAS ---
     function cerrarModal(idModal) {
         document.getElementById(idModal).style.display = 'none';
     }

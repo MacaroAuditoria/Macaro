@@ -10,8 +10,7 @@
 <div class="header">
     <div class="user-info">🚚 Gestión de Distribuidores</div>
     <div>
-        <a href="index.php?action=catalogo" class="btn-primario" style="text-decoration: none; padding: 10px 15px; background: #6c757d; margin-right: 10px;">Volver al Catálogo</a>
-        <a href="?action=logout" class="logout-btn">Salir</a>
+        <a href="index.php?action=catalogo" class="logout-btn" style="background:#666;"">Volver al Catálogo</a>
     </div>
 </div>
 
