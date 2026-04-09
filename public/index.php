@@ -1087,25 +1087,34 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos' && isset($_SESSION
     exit;
 }
 
-// 2. PANTALLA DE ALTA RÁPIDA
+// ==========================================
+// MÓDULO: ALTA DE PRODUCTO (COMPLETA)
+// ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'productos_alta' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['codigo_barras'])) {
         try {
-            $sql = "INSERT INTO productos (codigo_barras, descripcion, marca, categoria_id, distribuidor_id) 
-                    VALUES (:codigo_barras, :descripcion, :marca, :categoria_id, :distribuidor_id)";
+            // Agregamos los nuevos campos a la consulta SQL
+            $sql = "INSERT INTO productos (codigo_barras, sku, descripcion, marca, precio_compra, precio_venta, categoria_id, distribuidor_id) 
+                    VALUES (:codigo_barras, :sku, :descripcion, :marca, :precio_compra, :precio_venta, :categoria_id, :distribuidor_id)";
             $stmt = $db->prepare($sql);
+            
             $stmt->execute([
                 'codigo_barras' => trim($_POST['codigo_barras']),
-                'descripcion' => trim($_POST['descripcion']),
-                'marca' => !empty($_POST['marca']) ? trim($_POST['marca']) : null,
-                'categoria_id' => !empty($_POST['categoria_id']) ? $_POST['categoria_id'] : null,
-                'distribuidor_id' => !empty($_POST['distribuidor_id']) ? $_POST['distribuidor_id'] : null
+                'sku' => trim($_POST['sku']), // Ahora es obligatorio
+                'descripcion' => trim(strtoupper($_POST['descripcion'])), // Mayúsculas para mantener proljo el catálogo
+                'marca' => !empty($_POST['marca']) ? trim(strtoupper($_POST['marca'])) : null,
+                'precio_compra' => !empty($_POST['precio_compra']) ? floatval($_POST['precio_compra']) : null,
+                'precio_venta' => !empty($_POST['precio_venta']) ? floatval($_POST['precio_venta']) : null,
+                'categoria_id' => !empty($_POST['categoria_id']) ? intval($_POST['categoria_id']) : null,
+                'distribuidor_id' => !empty($_POST['distribuidor_id']) ? intval($_POST['distribuidor_id']) : null
             ]);
-            $exito = "Producto guardado. ¡Escaneá el siguiente!";
-        } catch (Exception $e) { $error = "Error o código duplicado."; }
+            $exito = "✅ Producto guardado exitosamente. ¡Podés ingresar otro!";
+        } catch (Exception $e) { 
+            $error = "❌ Error al guardar. Es posible que el Código de Barras o el SKU ya estén registrados."; 
+        }
     }
 
     $listaCategorias = $db->query("SELECT id, nombre FROM categorias ORDER BY nombre ASC")->fetchAll();
@@ -1114,31 +1123,104 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_alta' && isset($_SE
     exit;
 }
 
-// 3. PANTALLA DE GESTIÓN (BUSCADOR + LISTA LIMITADA)
+// ==========================================
+// MÓDULO: GESTIÓN DE PRODUCTOS (BUSCADOR EN TIEMPO REAL)
+// ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'productos_gestion' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
 
-    $termino = isset($_GET['busqueda']) ? "%" . $_GET['busqueda'] . "%" : null;
-
-    if ($termino) {
-        $sql = "SELECT p.*, c.nombre as categoria_nombre FROM productos p 
-                LEFT JOIN categorias c ON p.categoria_id = c.id 
-                WHERE p.codigo_barras LIKE :t OR p.descripcion LIKE :t ORDER BY p.id DESC LIMIT 20";
-        $stmt = $db->prepare($sql);
-        $stmt->execute(['t' => $termino]);
-        $listaProductos = $stmt->fetchAll();
-    } else {
-        // Por defecto, solo los últimos 10 para que cargue instantáneo
-        $listaProductos = $db->query("SELECT p.*, c.nombre as categoria_nombre FROM productos p 
-                                     LEFT JOIN categorias c ON p.categoria_id = c.id 
-                                     ORDER BY p.id DESC LIMIT 10")->fetchAll();
-    }
+    // Traemos TODOS los productos para alimentar el buscador en tiempo real de JavaScript.
+    // Cruzamos los datos con categorías y distribuidores para obtener los nombres reales.
+    $listaProductos = $db->query("
+        SELECT p.*, c.nombre as categoria_nombre, d.nombre as distribuidor_nombre 
+        FROM productos p 
+        LEFT JOIN categorias c ON p.categoria_id = c.id 
+        LEFT JOIN distribuidores d ON p.distribuidor_id = d.id 
+        ORDER BY p.id DESC
+    ")->fetchAll();
 
     require_once __DIR__ . '/../src/Application/Views/productos_gestion.php';
     exit;
 }
 // ==========================================
+// MÓDULO: EDICIÓN DE PRODUCTO
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    $id = $_GET['id'] ?? null;
+
+    if (!$id) { header("Location: index.php?action=productos_gestion"); exit; }
+
+    // --- PROCESAR LA ACTUALIZACIÓN (POST) ---
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        try {
+            $sql = "UPDATE productos SET 
+                    codigo_barras = :cb, sku = :sku, descripcion = :desc, 
+                    marca = :marca, precio_compra = :pc, precio_venta = :pv, 
+                    categoria_id = :cat, distribuidor_id = :dist 
+                    WHERE id = :id";
+            
+            $stmt = $db->prepare($sql);
+            $stmt->execute([
+                'cb'    => trim($_POST['codigo_barras']),
+                'sku'   => trim($_POST['sku']),
+                'desc'  => trim(strtoupper($_POST['descripcion'])),
+                'marca' => !empty($_POST['marca']) ? trim(strtoupper($_POST['marca'])) : null,
+                'pc'    => !empty($_POST['precio_compra']) ? floatval($_POST['precio_compra']) : null,
+                'pv'    => !empty($_POST['precio_venta']) ? floatval($_POST['precio_venta']) : null,
+                'cat'   => !empty($_POST['categoria_id']) ? intval($_POST['categoria_id']) : null,
+                'dist'  => !empty($_POST['distribuidor_id']) ? intval($_POST['distribuidor_id']) : null,
+                'id'    => $id
+            ]);
+            
+            // 🔥 LA MAGIA ESTÁ ACÁ: Redirigimos al listado con un mensaje de éxito por URL
+            
+            // Buscá dentro de 'productos_alta', después del $stmt->execute(...), cambiá el header:
+            header("Location: index.php?action=productos_gestion&msj=creado");
+            exit;
+        
+        } catch (Exception $e) {
+            $error = "❌ Error al actualizar: El código o SKU ya existen.";
+        }
+    }
+
+    // --- CARGAR DATOS DEL PRODUCTO ---
+    $stmt = $db->prepare("SELECT * FROM productos WHERE id = ?");
+    $stmt->execute([$id]);
+    $p = $stmt->fetch();
+
+    if (!$p) { die("Producto no encontrado."); }
+
+    $listaCategorias = $db->query("SELECT id, nombre FROM categorias ORDER BY nombre ASC")->fetchAll();
+    $listaDistribuidores = $db->query("SELECT id, nombre FROM distribuidores ORDER BY nombre ASC")->fetchAll();
+    
+    require_once __DIR__ . '/../src/Application/Views/productos_editar.php';
+    exit;
+}
+// ==========================================
+// --- 2. NUEVA ACCIÓN: ELIMINAR PRODUCTO dentro de productos_gestion ---
+if (isset($_GET['action']) && $_GET['action'] === 'productos_eliminar' && isset($_SESSION['usuario_id'])) {
+    // Seguridad: Solo el administrador (Rol 1) puede borrar productos
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado. Solo administradores pueden eliminar productos."); }
+    
+    $db = (new Database())->getConnection();
+    $id = $_GET['id'] ?? null;
+
+    if ($id) {
+        try {
+            $stmt = $db->prepare("DELETE FROM productos WHERE id = ?");
+            $stmt->execute([$id]);
+            header("Location: index.php?action=productos_gestion&msj=eliminado");
+        } catch (Exception $e) {
+            header("Location: index.php?action=productos_gestion&msj=error_borrado");
+        }
+    } else {
+        header("Location: index.php?action=productos_gestion");
+    }
+    exit;
+}
 // ==========================================
 // MÓDULO: ABM DE USUARIOS
 // ==========================================

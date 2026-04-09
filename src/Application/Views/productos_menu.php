@@ -17,8 +17,8 @@
 <div class="menu-grid">
     <a href="?action=productos_alta" class="menu-card">
         <span class="menu-icon">➕</span>
-        <h3 class="menu-title">Alta Rápida</h3>
-        <p style="font-size: 12px; color: #666;">Solo Código y Descripción</p>
+        <h3 class="menu-title">Alta de Producto</h3>
+        <p style="font-size: 12px; color: #666;">Completo</p>
     </a>
 
     <a href="?action=productos_gestion" class="menu-card">
