@@ -254,22 +254,21 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_v
 // ==========================================
 // MÓDULO: MONITOR DE AUDITORÍA (ENCARGADOS)
 // ==========================================
-// GESTIÓN DEL MONITOR DE ZONAS
-
- 
 // 1. VER EL MONITOR PRINCIPAL
 if (isset($_GET['action']) && $_GET['action'] === 'monitor_zonas') {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
 
-    // AQUÍ TAMBIÉN AGREGAMOS EL FILTRO
     $locales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre")->fetchAll();
-    $sectores = $db->query("SELECT id, nombre FROM sectores ORDER BY nombre ASC")->fetchAll();
+    
+    // 🔥 MAGIA 1: Traemos también el local_id
+    $sectores = $db->query("SELECT id, nombre, local_id FROM sectores ORDER BY nombre ASC")->fetchAll();
+    $json_sectores = json_encode($sectores); // Lo empaquetamos para JavaScript
     
     $local_id = isset($_GET['local_id']) ? $_GET['local_id'] : null;
     $sector_id = isset($_GET['sector_id']) ? $_GET['sector_id'] : null;
     $datos_tabla = [];
-
+    
     if ($local_id && $sector_id) {
         $sql = "SELECT z.id AS zona_id, z.codigo AS zona_nombre,
                     (SELECT id FROM zonas_cerradas WHERE zona_id = z.id AND local_id = :loc1 AND sector_id = :sec1 AND estado = 'cerrada' LIMIT 1) AS bloqueada,

@@ -31,11 +31,6 @@
 </div>
 
 <div class="submenu-container">
-    <a href="index.php?action=actas_buscar" class="submenu-card" style="border-top: 4px solid #2196f3;">
-        <span class="icon">🔍</span>
-        <h3>Buscar Actas</h3>
-    </a>
-
     <a href="index.php?action=progreso_encargado" class="submenu-card" style="border-top: 4px solid #ff9800;">
         <span class="icon">📈</span>
         <h3>Rendimiento</h3>
