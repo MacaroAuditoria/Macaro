@@ -11,7 +11,6 @@
     <div class="user-info">📁 Gestión de Categorías</div>
     <div>
         <a href="index.php?action=catalogo" class="btn-primario" style="text-decoration: none; padding: 10px 15px; background: #6c757d; margin-right: 10px;">Volver al Catálogo</a>
-        <a href="?action=logout" class="logout-btn">Salir</a>
     </div>
 </div>
 
@@ -30,19 +29,21 @@
 
     <hr style="border: 0; border-top: 1px solid #eee; margin-bottom: 20px;">
 
-    <h3>Categorías Registradas</h3>
-    <ul style="list-style: none; padding: 0;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px;">
+        <h3 style="margin: 0;">Categorías Registradas</h3>
+        <input type="text" id="buscadorCategoria" placeholder="🔍 Buscar categoría..." style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; width: 250px;">
+    </div>
+
+    <ul style="list-style: none; padding: 0;" id="listaCategoriasUI">
         <?php if (empty($listaCategorias)): ?>
             <li style="color: var(--color-texto-claro);">No hay categorías registradas.</li>
         <?php else: ?>
             <?php foreach ($listaCategorias as $categoria): ?>
-                <li style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
-                    <strong><?php echo htmlspecialchars($categoria['nombre']); ?></strong>
+                <li class="item-categoria" style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                    <strong class="nombre-cat"><?php echo htmlspecialchars($categoria['nombre']); ?></strong>
                     <div>
                         <span style="color: #ccc; margin-right: 15px; font-size: 14px;">ID: <?php echo $categoria['id']; ?></span>
-                        
                         <a href="?action=editar_categoria&id=<?php echo $categoria['id']; ?>" class="btn-primario" style="padding: 5px 10px; text-decoration: none; font-size: 14px; background-color: #ffc107; color: #000;">✏️</a>
-                        
                         <a href="?action=eliminar_categoria&id=<?php echo $categoria['id']; ?>" class="btn-primario" style="padding: 5px 10px; text-decoration: none; font-size: 14px; background-color: var(--color-peligro); margin-left: 5px;" onclick="return confirm('¿Seguro que querés eliminar esta categoría?');">🗑️</a>
                     </div>
                 </li>
@@ -50,6 +51,45 @@
         <?php endif; ?>
     </ul>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputBusqueda = document.getElementById('buscadorCategoria');
+    // Buscamos todos los elementos <li> que tengan la clase 'item-categoria'
+    const listaItems = document.querySelectorAll('.item-categoria');
 
+    function filtrarLista() {
+        const texto = inputBusqueda.value.toLowerCase().trim();
+        const estaVacio = (texto === "");
+
+        listaItems.forEach((item, index) => {
+            // Atrapamos el texto del nombre de la categoría
+            const nombre = item.querySelector('.nombre-cat').textContent.toLowerCase();
+            const coincide = nombre.includes(texto);
+
+            if (estaVacio) {
+                // MODO REPOSO: Mostrar solo los últimos 7
+                if (index < 7) {
+                    item.style.display = 'flex'; // Usamos flex porque tu <li> tiene display: flex
+                } else {
+                    item.style.display = 'none';
+                }
+            } else {
+                // MODO BÚSQUEDA: Mostrar todo lo que coincida
+                if (coincide) {
+                    item.style.display = 'flex';
+                } else {
+                    item.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // Ejecutamos la función apenas carga la página para esconder del 8 en adelante
+    filtrarLista();
+
+    // Activamos el "sensor" para que filtre al instante cuando escribís
+    inputBusqueda.addEventListener('keyup', filtrarLista);
+});
+</script>
 </body>
 </html>

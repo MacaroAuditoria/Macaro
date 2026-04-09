@@ -35,7 +35,20 @@
     </div>
 
     <div class="card-table">
-        <h3>Sectores Registrados</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #f8f9fa; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+        <h3 style="margin: 0; color: #333; font-size: 18px;">📋 Sectores Registrados</h3>
+        
+        <div style="display: flex; gap: 10px;">
+            <div style="position: relative;">
+                <span style="position: absolute; left: 12px; top: 9px; color: #adb5bd;">🔍</span>
+                <input type="text" id="buscadorSector" placeholder="Buscar sector..." style="padding: 8px 15px 8px 35px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; width: 180px; outline: none;">
+            </div>
+            
+            <select id="filtroLocal" style="padding: 8px 15px; border: 1px solid #ced4da; border-radius: 6px; font-size: 14px; outline: none; background: white; cursor: pointer;">
+                <option value="">Todos los Inventarios</option>
+                </select>
+        </div>
+    </div>
         <table class="tabla-gestion">
             <thead>
                 <tr>
@@ -60,5 +73,70 @@
     </div>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputBusqueda = document.getElementById('buscadorSector');
+    const selectLocal = document.getElementById('filtroLocal');
+    const filasTabla = document.querySelectorAll('.tabla-gestion tbody tr');
+
+    // 1. Extraemos los locales de la Columna 0 (Inventario / Local)
+    const localesUnicos = new Set();
+    filasTabla.forEach(fila => {
+        if(fila.cells.length > 1) {
+            // ---> CORRECCIÓN ACÁ: El local está en la columna 0
+            localesUnicos.add(fila.cells[0].textContent.trim());
+        }
+    });
+    
+    // Rellenamos el filtro desplegable
+    [...localesUnicos].sort().forEach(local => {
+        if(local) {
+            const option = document.createElement('option');
+            option.value = local.toLowerCase();
+            option.textContent = local;
+            selectLocal.appendChild(option);
+        }
+    });
+
+    // 2. Lógica del filtro en vivo
+    function filtrarTabla() {
+        const texto = inputBusqueda.value.toLowerCase().trim();
+        const localFiltro = selectLocal.value.toLowerCase().trim();
+        const estaVacio = (texto === "" && localFiltro === "");
+
+        filasTabla.forEach((fila, index) => {
+            if(fila.cells.length < 2) return;
+
+            // ---> CORRECCIÓN ACÁ: Apuntamos a las columnas correctas según tu HTML
+            const nombreLocal = fila.cells[0].textContent.toLowerCase(); // Columna 0
+            const nombreSector = fila.cells[1].textContent.toLowerCase(); // Columna 1
+
+            const coincideTexto = nombreSector.includes(texto);
+            const coincideLocal = (localFiltro === "" || nombreLocal === localFiltro);
+
+            if (estaVacio) {
+                // MODO REPOSO: Mostrar solo los últimos 7
+                if (index < 7) {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            } else {
+                // MODO BÚSQUEDA
+                if (coincideTexto && coincideLocal) {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    filtrarTabla();
+
+    inputBusqueda.addEventListener('keyup', filtrarTabla);
+    selectLocal.addEventListener('change', filtrarTabla);
+});
+</script>
 </body>
 </html>

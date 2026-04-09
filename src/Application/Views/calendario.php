@@ -79,8 +79,7 @@
     <div class="card-table" style="margin-top: 40px; border-top: 4px solid #673ab7; padding: 20px;">
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
-            <h3 style="margin: 0; color: #333;">📋 Auditorías de la semana <span style="font-size: 14px; color: #666; font-weight: normal;">(<?php echo $titulo_semana; ?>)</span></h3>
-            
+            <h3>Cronograma: <span style="color: #2196f3;"><?php echo $titulo_periodo; ?></span></h3>            
             <div class="barra-busqueda">
                 <input type="text" id="buscadorTexto" placeholder="🔍 Buscar por local o encargado...">
                 <select id="buscadorEstado">
@@ -106,7 +105,15 @@
             <tbody>
                 <?php foreach($eventos_db as $e): ?>
                 <tr>
-                    <td><strong><?php echo date('d/m/Y', strtotime($e['fecha_auditoria'])); ?></strong></td>
+                    <td>
+                        <?php echo date('d/m/Y', strtotime($e['fecha_auditoria'])); ?>
+                        <?php 
+                        // Solo agregamos el cartelito si está atrasada
+                        if ($e['fecha_auditoria'] < date('Y-m-d') && $e['estado'] === 'Pendiente'): 
+                        ?>
+                            <br><span style="color: #f44336; font-size: 10px; font-weight: bold;">⚠️ ATRASADA</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?php echo date('H:i', strtotime($e['hora_auditoria'])); ?></td>
                     <td class="col-local"><?php echo htmlspecialchars($e['local_nombre']); ?></td>
                     <td class="col-encargado"><?php echo htmlspecialchars($e['encargado_nombre']); ?></td>
@@ -128,7 +135,7 @@
                 <?php endforeach; ?>
                 
                 <?php if(empty($eventos_db)): ?>
-                    <tr id="filaVacia"><td colspan="6" style="text-align:center; padding: 20px;">No hay auditorías registradas.</td></tr>
+                    <tr id="filaVacia"><td colspan="6" style="text-align:center; padding: 20px;">No hay auditorías registradas en este período.</td></tr>
                 <?php endif; ?>
             </tbody>
         </table>

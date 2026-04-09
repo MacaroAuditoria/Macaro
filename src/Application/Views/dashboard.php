@@ -37,20 +37,25 @@
             <h3 class="menu-title">Monitor</h3>
         </a>
 
-        <a href="index.php?action=ajustes_menu" class="menu-card">
-            <span class="menu-icon">⚙️</span>
-            <h3 class="menu-title">Ajustes</h3>
-        </a>
-
         <a href="index.php?action=inventario_menu" class="menu-card" style="border: 2px solid #00897b; background: #e0f2f1;">
             <span class="menu-icon">📥</span>
             <h3 class="menu-title">Inventario</h3>
+        </a>
+
+        <a href="?action=actas_menu" class="menu-card" style="text-decoration: none;">
+            <span class="menu-icon">📝</span>
+            <h3 class="menu-title">Actas</h3>
         </a>
 
         <!-- Tarjeta unificada en el Dashboard -->
         <a href="index.php?action=menu_graficos" class="menu-card">
             <span class="menu-icon">📊</span>
             <h3 class="menu-title">Gráficos</h3>
+        </a>
+
+        <a href="index.php?action=ajustes_menu" class="menu-card">
+            <span class="menu-icon">⚙️</span>
+            <h3 class="menu-title">Ajustes</h3>
         </a>
     <?php endif; ?> <!-- ACÁ CERRAMOS EL GRUPO DE ADMIN/ENCARGADO -->
 

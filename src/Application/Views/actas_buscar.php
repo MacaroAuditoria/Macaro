@@ -9,7 +9,7 @@
 
 <div class="header">
     <div class="user-info">🔍 Buscador de Actas Históricas</div>
-    <a href="index.php?action=menu_graficos" class="logout-btn" style="background:#666;">Volver</a>
+    <a href="index.php?action=actas_menu" class="logout-btn" style="background:#666;">Volver</a>
 </div>
 
 <div class="container-abm">

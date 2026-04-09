@@ -97,8 +97,7 @@
 
         <div class="form-group" style="margin-top: 15px;">
             <label>Observaciones o Comentarios (Opcional):</label>
-            <textarea name="comentario" rows="2" placeholder="Si desea dejarnos algún mensaje..."></textarea>
-        </div>
+<textarea name="comentario" rows="4" style="resize: vertical; max-width: 100%; box-sizing: border-box; width: 100%; min-height: 100px;" placeholder="Observaciones o comentarios adicionales..."></textarea>        </div>
 
         <div class="form-group">
             <label>Firma de Conformidad: <span style="color:red">*</span></label>

@@ -66,7 +66,20 @@
     </div>
 
     <div class="card-table">
-        <h3>Usuarios en el Sistema</h3>
+        <h3>--------------------------------------</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
+            <h3 style="margin: 0; color: #333;">📋 Usuarios Registrados</h3>
+            
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <input type="text" id="buscadorNombre" placeholder="🔍 Buscar por nombre..." style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; width: 250px;">
+                <select id="buscadorRol" style="padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+                    <option value="">Todos los Roles</option>
+                    <?php foreach($listaRoles as $r): ?>
+                        <option value="<?php echo htmlspecialchars(strtolower($r['nombre'])); ?>"><?php echo htmlspecialchars($r['nombre']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+        </div>
         <table class="tabla-gestion">
             <thead>
                 <tr>
@@ -106,6 +119,55 @@
         </table>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const inputBusqueda = document.getElementById('buscadorNombre');
+    const selectRol = document.getElementById('buscadorRol');
+    // Buscamos las filas del cuerpo de la tabla
+    const filasTabla = document.querySelectorAll('.tabla-gestion tbody tr');
 
+    function filtrarTabla() {
+        const texto = inputBusqueda.value.toLowerCase().trim();
+        const rolSeleccionado = selectRol.value.toLowerCase().trim();
+        
+        const estaVacio = (texto === "" && rolSeleccionado === "");
+
+        filasTabla.forEach((fila, index) => {
+            // Ignorar filas de relleno (si las hay)
+            if(fila.cells.length < 3) return; 
+
+            // Atrapamos los textos: Columna 0 es Nombre, Columna 2 es Rol
+            const nombre = fila.cells[0].textContent.toLowerCase();
+            const rol = fila.cells[2].textContent.toLowerCase();
+
+            const coincideTexto = nombre.includes(texto);
+            const coincideRol = (rolSeleccionado === "" || rol.includes(rolSeleccionado));
+
+            if (estaVacio) {
+                // MODO REPOSO: Mostrar solo los últimos 7 creados
+                if (index < 7) {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            } else {
+                // MODO BÚSQUEDA: Mostrar todo lo que coincida, sin importar si es el número 8 o el 100
+                if (coincideTexto && coincideRol) {
+                    fila.style.display = '';
+                } else {
+                    fila.style.display = 'none';
+                }
+            }
+        });
+    }
+
+    // Ejecutamos la función apenas carga la página para que esconda del 8 en adelante
+    filtrarTabla();
+
+    // Activamos los "sensores" para que filtre al instante cuando escribís o cambiás de rol
+    inputBusqueda.addEventListener('keyup', filtrarTabla);
+    selectRol.addEventListener('change', filtrarTabla);
+});
+</script>
 </body>
 </html>

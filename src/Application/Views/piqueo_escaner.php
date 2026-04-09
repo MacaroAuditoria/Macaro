@@ -67,6 +67,10 @@
         <div id="dropMenu" class="dropdown-menu">
             <a href="index.php?action=piqueo_visualizar">👁️ Visualizar lo escaneado</a>
             
+            <a href="#" onclick="document.getElementById('modalNuevoProducto').style.display='flex'; return false;" style="display: block; padding: 15px; text-decoration: none; border-bottom: 1px solid #eee; font-weight: bold;">
+                ➕ Agregar Producto
+            </a>
+
             <a href="index.php?action=piqueo_salir_zona" onclick="return confirm('¿Seguro que deseas SALIR SIN BLOQUEAR? \n\nLa zona quedará disponible para que puedas volver a entrar más tarde.');">🔙 Salir sin bloquear</a>
             
             <a href="index.php?action=piqueo_terminar_zona" onclick="return confirm('⚠️ ATENCIÓN \n\n¿Seguro que deseas TERMINAR y BLOQUEAR esta zona definitivamente?');" style="color: #ff5252; font-weight: bold;">🔴 Terminar y Bloquear</a>
@@ -83,8 +87,9 @@
 </div>
 
 <div class="scanner-area">
-    <?php echo $mensaje_estado; ?>
-
+    <?php echo $mensaje_estado;
+    if (isset($_GET['prod_creado'])) { $mensaje_estado = "<div class='success-card'>✅ Producto " . htmlspecialchars($_GET['prod_creado']) . " creado con éxito. Ya podés escanearlo.</div>"; } ?>
+    
     <form method="POST" action="index.php?action=piqueo_escaner" id="scanForm">
         <label class="etiqueta-centrada">CÓDIGO DE BARRAS</label>
         <div class="input-group">
@@ -102,6 +107,28 @@
     <div class="total-box">
         Total en esta Zona
         <span><?php echo $total_zona; ?></span>
+    </div>
+</div>
+
+<div id="modalNuevoProducto" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 25px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+        <h3 style="margin-top: 0; color: #333; border-bottom: 2px solid #00897b; padding-bottom: 10px; font-size: 20px;">📦 Alta Rápida</h3>
+        
+        <form action="index.php?action=piqueo_crear_producto" method="POST">
+            <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #555; font-size: 14px;">Código de Barras *</label>
+            <input type="text" name="codigo_barras" required placeholder="Ej: 7730000000000" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px;">
+
+            <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #555; font-size: 14px;">SKU (Opcional)</label>
+            <input type="text" name="sku" placeholder="Ej: ART-123" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px;">
+
+            <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #555; font-size: 14px;">Descripción *</label>
+            <input type="text" name="descripcion" required placeholder="Nombre del producto..." style="width: 100%; padding: 12px; margin-bottom: 25px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; text-transform: uppercase;">
+
+            <div style="display: flex; gap: 10px;">
+                <button type="button" onclick="document.getElementById('modalNuevoProducto').style.display='none';" style="flex: 1; padding: 15px; background: #e0e0e0; color: #333; border: none; border-radius: 6px; font-weight: bold; font-size: 16px; cursor: pointer;">Cancelar</button>
+                <button type="submit" style="flex: 1; padding: 15px; background: #00897b; color: white; border: none; border-radius: 6px; font-weight: bold; font-size: 16px; cursor: pointer;">Crear Producto</button>
+            </div>
+        </form>
     </div>
 </div>
 

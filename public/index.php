@@ -20,84 +20,85 @@ if (isset($_GET['action']) && $_GET['action'] === 'catalogo' && isset($_SESSION[
     require_once __DIR__ . '/../src/Application/Views/catalogo.php';
     exit;
 }
+
 // ==========================================
 // MÓDULO DE CATEGORÍAS (ABM COMPLETO)
 // ==========================================
 
-// 1. LISTADO Y ALTA (Actualizado con Teléfono, Email y Fecha Nacimiento)
-if (isset($_GET['action']) && $_GET['action'] === 'usuarios_gestion' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+// 1. ALTA Y LECTURA DE CATEGORÍAS
+if (isset($_GET['action']) && $_GET['action'] === 'categorias' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
-    $error = "";
+    $error = null;
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['usuario']) && !empty($_POST['password'])) {
+    // Si mandan el formulario para crear una nueva
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nueva_categoria'])) {
         try {
-            $hash = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
-            $stmt = $db->prepare("INSERT INTO usuarios (nombre_completo, usuario, password, rol_id, estado, telefono, email, fecha_nacimiento) VALUES (?, ?, ?, ?, 1, ?, ?, ?)");
-            $stmt->execute([
-                trim($_POST['nombre_completo']),
-                trim($_POST['usuario']),
-                $hash,
-                $_POST['rol_id'],
-                !empty($_POST['telefono']) ? trim($_POST['telefono']) : null,
-                !empty($_POST['email']) ? trim($_POST['email']) : null,
-                !empty($_POST['fecha_nacimiento']) ? $_POST['fecha_nacimiento'] : null
-            ]);
-            header("Location: index.php?action=usuarios_gestion");
+            $stmt = $db->prepare("INSERT INTO categorias (nombre) VALUES (:nombre)");
+            $stmt->execute(['nombre' => trim($_POST['nueva_categoria'])]);
+            header("Location: index.php?action=categorias");
             exit;
         } catch (Exception $e) {
-            $error = "❌ Error: El nombre de usuario ya existe.";
+            $error = "La categoría ya existe o hubo un error.";
         }
     }
-
-    $listaUsuarios = $db->query("SELECT u.*, r.nombre as rol_nombre FROM usuarios u LEFT JOIN roles r ON u.rol_id = r.id ORDER BY r.id ASC, u.nombre_completo ASC")->fetchAll();
-    $listaRoles = $db->query("SELECT id, nombre FROM roles ORDER BY id ASC")->fetchAll();
-
-    require_once __DIR__ . '/../src/Application/Views/usuarios_gestion.php';
+    
+    // Cargamos la lista para mostrarla
+    $listaCategorias = $db->query("SELECT id, nombre FROM categorias ORDER BY id DESC")->fetchAll();
+    
+    require_once __DIR__ . '/../src/Application/Views/categorias.php';
     exit;
 }
 
-// 2. EDICIÓN (Actualizado)
-if (isset($_GET['action']) && $_GET['action'] === 'editar_usuario' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+// 2. EDICIÓN DE CATEGORÍAS
+if (isset($_GET['action']) && $_GET['action'] === 'editar_categoria' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
+    $error = null;
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['id'])) {
-        $tel = !empty($_POST['telefono']) ? trim($_POST['telefono']) : null;
-        $mail = !empty($_POST['email']) ? trim($_POST['email']) : null;
-        $f_nac = !empty($_POST['fecha_nacimiento']) ? $_POST['fecha_nacimiento'] : null;
-
-        if (!empty($_POST['password'])) {
-            $hash = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
-            $stmt = $db->prepare("UPDATE usuarios SET nombre_completo = ?, usuario = ?, password = ?, rol_id = ?, estado = ?, telefono = ?, email = ?, fecha_nacimiento = ? WHERE id = ?");
-            $stmt->execute([trim($_POST['nombre_completo']), trim($_POST['usuario']), $hash, $_POST['rol_id'], $_POST['estado'], $tel, $mail, $f_nac, $_POST['id']]);
-        } else {
-            $stmt = $db->prepare("UPDATE usuarios SET nombre_completo = ?, usuario = ?, rol_id = ?, estado = ?, telefono = ?, email = ?, fecha_nacimiento = ? WHERE id = ?");
-            $stmt->execute([trim($_POST['nombre_completo']), trim($_POST['usuario']), $_POST['rol_id'], $_POST['estado'], $tel, $mail, $f_nac, $_POST['id']]);
+    // A. Cuando el usuario hace clic en "Guardar Cambios" (Envío del formulario POST)
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre']) && !empty($_POST['id'])) {
+        try {
+            $stmt = $db->prepare("UPDATE categorias SET nombre = :nombre WHERE id = :id");
+            $stmt->execute(['nombre' => trim($_POST['nombre']), 'id' => $_POST['id']]);
+            // Volvemos a la lista de categorías
+            header("Location: index.php?action=categorias"); 
+            exit;
+        } catch (Exception $e) {
+            $error = "Hubo un error al actualizar la categoría o el nombre ya existe.";
         }
-        header("Location: index.php?action=usuarios_gestion");
-        exit;
     }
-
-    $stmt = $db->prepare("SELECT * FROM usuarios WHERE id = ?");
-    $stmt->execute([$_GET['id']]);
-    $usuario_editar = $stmt->fetch();
-    $listaRoles = $db->query("SELECT id, nombre FROM roles ORDER BY id ASC")->fetchAll();
-
-    require_once __DIR__ . '/../src/Application/Views/editar_usuario.php';
+    
+    // B. Cuando el usuario entra a la pantalla para ver el formulario (GET)
+    if (isset($_GET['id'])) {
+        $stmt = $db->prepare("SELECT id, nombre FROM categorias WHERE id = :id");
+        $stmt->execute(['id' => intval($_GET['id'])]);
+        $catActual = $stmt->fetch();
+        
+        if ($catActual) {
+            // Cargamos la vista correcta para editar la categoría
+            require_once __DIR__ . '/../src/Application/Views/editar_categoria.php';
+            exit;
+        }
+    }
+    
+    // Si no mandaron ID o no existe, lo pateamos de vuelta al menú
+    header("Location: index.php?action=categorias");
     exit;
 }
 
-// 3. BAJA (ELIMINACIÓN)
+// 3. ELIMINAR CATEGORÍA
 if (isset($_GET['action']) && $_GET['action'] === 'eliminar_categoria' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
     if (isset($_GET['id'])) {
-        $db = (new Database())->getConnection();
         try {
             $stmt = $db->prepare("DELETE FROM categorias WHERE id = :id");
-            $stmt->execute(['id' => $_GET['id']]);
+            $stmt->execute(['id' => intval($_GET['id'])]);
         } catch (Exception $e) {
-            die("<div style='padding:20px; font-family:Arial;'><h3>❌ Error</h3><p>No se puede eliminar esta categoría porque tiene productos asociados.</p><a href='index.php?action=categorias'>Volver atrás</a></div>");
+            // Si la categoría ya tiene productos asociados, la base de datos va a bloquear el borrado 
+            // por seguridad (Clave Foránea). Acá se ataja ese error silenciosamente.
         }
     }
     header("Location: index.php?action=categorias");
@@ -122,8 +123,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'distribuidores' && isset($_SE
             $error = "El distribuidor ya existe o hubo un error.";
         }
     }
-    $stmt = $db->query("SELECT id, nombre FROM distribuidores ORDER BY nombre ASC");
+    
+    // 👇 ACÁ ESTÁ EL CAMBIO: Cambiamos 'ORDER BY nombre ASC' por 'ORDER BY id DESC'
+    $stmt = $db->query("SELECT id, nombre FROM distribuidores ORDER BY id DESC");
     $listaDistribuidores = $stmt->fetchAll();
+    
     require_once __DIR__ . '/../src/Application/Views/distribuidores.php';
     exit;
 }
@@ -184,7 +188,7 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_v
         $filtro_encargado = $_GET['encargado_id'] ?? '';
 
         $query = "SELECT e.*, l.nombre as local_nombre, u.nombre_completo as encargado_nombre 
-                  FROM evaluaciones e 
+                  FROM actas e 
                   JOIN locales l ON e.local_id = l.id 
                   JOIN usuarios u ON e.encargado_id = u.id 
                   WHERE e.completada = 1";
@@ -209,7 +213,7 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_v
     // 2. VER UN ACTA ESPECÍFICA (SOLO LECTURA)
     if ($_GET['action'] === 'acta_ver') {
         $stmt = $db->prepare("SELECT e.*, l.nombre as local_nombre, u.nombre_completo as encargado_nombre 
-                              FROM evaluaciones e 
+                              FROM actas e 
                               JOIN locales l ON e.local_id = l.id 
                               JOIN usuarios u ON e.encargado_id = u.id 
                               WHERE e.id = ?");
@@ -232,7 +236,7 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_v
                 AVG(estrellas_prolijidad) as prom_prolijidad,
                 AVG(estrellas_trato) as prom_trato,
                 COUNT(id) as total_actas
-                FROM evaluaciones 
+                FROM actas
                 WHERE encargado_id = ? AND completada = 1");
             $stmt->execute([$_GET['encargado_id']]);
             $datos_grafico = $stmt->fetch();
@@ -251,7 +255,6 @@ if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_v
 // MÓDULO: MONITOR DE AUDITORÍA (ENCARGADOS)
 // ==========================================
 // GESTIÓN DEL MONITOR DE ZONAS
-
 
  
 // 1. VER EL MONITOR PRINCIPAL
@@ -453,10 +456,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_config' && isset($_SES
         }
     }
 
-    $locales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
-    $sectores = $db->query("SELECT id, nombre FROM sectores ORDER BY nombre ASC")->fetchAll();
-    $zonas_db = $db->query("SELECT id, codigo, local_id, sector_id FROM zonas ORDER BY codigo ASC")->fetchAll(PDO::FETCH_ASSOC);
-    $json_todas_las_zonas = json_encode($zonas_db);
+$locales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
+
+    // AGREGAMOS local_id A LA CONSULTA
+    $sectores = $db->query("SELECT id, nombre, local_id FROM sectores ORDER BY nombre ASC")->fetchAll();
+    
+    // Lo convertimos a JSON para que el JavaScript de la vista pueda leerlo fácil
+    $json_sectores = json_encode($sectores);
+
+    $zonas_db = $db->query("SELECT id, codigo, local_id, sector_id FROM zonas ORDER BY codigo ASC")->fetchAll(PDO::FETCH_ASSOC);    $json_todas_las_zonas = json_encode($zonas_db);
     $zonas_cerradas = $db->query("SELECT local_id, sector_id, zona_id FROM zonas_cerradas WHERE estado = 'cerrada'")->fetchAll(PDO::FETCH_ASSOC);
     $json_cerradas = json_encode($zonas_cerradas);
     
@@ -523,15 +531,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
             }
         } else {
             // 2. NO ES ZONA, ES UN PRODUCTO NORMAL
-            $stmt = $db->prepare("INSERT INTO conteos (local_id, sector_id, zona_id, usuario_id, codigo_barras, cantidad) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $_SESSION['usuario_id'], $codigo, $cantidad]);
-
+            
+            // PRIMERO: Verificamos si el producto existe en el catálogo
             $check_prod = $db->prepare("SELECT descripcion FROM productos WHERE codigo_barras = ?");
             $check_prod->execute([$codigo]);
             $prod = $check_prod->fetch();
 
             if ($prod) {
-                // Calculamos total
+                // SI EXISTE: Recién ahora lo guardamos en la base de datos
+                $stmt = $db->prepare("INSERT INTO conteos (local_id, sector_id, zona_id, usuario_id, codigo_barras, cantidad) VALUES (?, ?, ?, ?, ?, ?)");
+                $stmt->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $_SESSION['usuario_id'], $codigo, $cantidad]);
+
+                // Calculamos total de ese ítem
                 $stmt_item = $db->prepare("SELECT SUM(cantidad) FROM conteos WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND codigo_barras = ?");
                 $stmt_item->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $codigo]);
                 $total_item = number_format($stmt_item->fetchColumn(), 2, '.', '');
@@ -545,13 +556,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
                     </div>
                 </div>";
             } else {
+                // NO EXISTE: Hacemos sonar la chicharra y NO HACEMOS EL INSERT
                 $alerta_sonido = true;
                 $mensaje_estado = "
-                <div class='error-card'>
-                    <div style='font-size: 18px; margin-bottom: 8px;'>⚠️ PRODUCTO DESCONOCIDO</div>
+                <div class='error-card' style='background-color: #d32f2f; border-left: 5px solid #b71c1c;'>
+                    <div style='font-size: 18px; margin-bottom: 8px; font-weight: bold;'>⚠️ PRODUCTO DESCONOCIDO</div>
                     <div style='display: flex; justify-content: space-between; align-items: center;'>
-                        <span style='font-size: 26px; color: #fff;'>Guardado</span>
-                        <span style='font-size: 16px; color: #ffcdd2;'>(+{$cantidad}) <br><small>Cód: {$codigo}</small></span>
+                        <span style='font-size: 24px; color: #fff;'>RECHAZADO</span>
+                        <span style='font-size: 14px; color: #ffcdd2;'>No se guardó el conteo.<br><small>Cód: {$codigo}</small></span>
                     </div>
                 </div>";
             }
@@ -585,6 +597,34 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
 
     require_once __DIR__ . '/../src/Application/Views/piqueo_escaner.php';
     exit;
+}
+
+// ==========================================
+// MÓDULO: ALTA RÁPIDA DE PRODUCTO (DESDE ESCÁNER)
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'piqueo_crear_producto' && isset($_SESSION['usuario_id'])) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['codigo_barras']) && !empty($_POST['descripcion'])) {
+        $db = (new Database())->getConnection();
+        
+        $codigo = trim(strtoupper($_POST['codigo_barras']));
+        $sku = trim($_POST['sku'] ?? '');
+        $descripcion = trim(strtoupper($_POST['descripcion'])); // Lo pasamos a mayúsculas para mantener el orden
+
+        // 1. Verificamos que alguien no lo haya creado 2 segundos antes
+        $check = $db->prepare("SELECT id FROM productos WHERE codigo_barras = ?");
+        $check->execute([$codigo]);
+        
+        if (!$check->fetch()) {
+            // 2. Si no existe, lo creamos rápido
+            // Nota: Ajustá los nombres de las columnas si en tu base se llaman distinto
+            $stmt = $db->prepare("INSERT INTO productos (codigo_barras, sku, descripcion) VALUES (?, ?, ?)");
+            $stmt->execute([$codigo, $sku, $descripcion]);
+        }
+        
+        // 3. Lo devolvemos al escáner con un mensaje de éxito
+        header("Location: index.php?action=piqueo_escaner&prod_creado=" . urlencode($codigo));
+        exit;
+    }
 }
 
 // 3. NUEVA RUTA: SALIR SIN GUARDAR (CON LIMPIEZA POR CHECKPOINT)
@@ -734,13 +774,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'ajustes_sectores' && isset($_
     }
 
     // Traemos los sectores y le pegamos el nombre del local al que pertenecen
+    // (Esto ya lo habías arreglado perfecto con el ORDER BY s.id DESC)
     $listaSectores = $db->query("SELECT s.*, l.nombre as local_nombre 
                                  FROM sectores s 
                                  LEFT JOIN locales l ON s.local_id = l.id 
-                                 ORDER BY l.nombre ASC, s.nombre ASC")->fetchAll();
+                                 ORDER BY s.id DESC")->fetchAll();
     
-    // Traemos los locales para armar el menú desplegable (ComboBox)
-    $listaLocales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre ASC")->fetchAll();
+    // ---> CORRECCIÓN 1: Traemos los locales activos para armar el menú desplegable
+    $listaLocales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
 
     require_once __DIR__ . '/../src/Application/Views/ajustes_sectores.php';
     exit;
@@ -766,7 +807,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'editar_sector' && isset($_SES
     $stmt->execute([$_GET['id']]);
     $sector = $stmt->fetch();
     
-    $listaLocales = $db->query("SELECT id, nombre FROM locales ORDER BY nombre ASC")->fetchAll();
+    // ---> CORRECCIÓN 2: Filtro de locales activos también en la ventana de edición
+    $listaLocales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
 
     require_once __DIR__ . '/../src/Application/Views/editar_sector.php';
     exit;
@@ -788,35 +830,47 @@ if (isset($_GET['action']) && $_GET['action'] === 'eliminar_sector' && isset($_S
     exit;
 }
 // ==========================================
-// MÓDULO: ABM DE LOCALES (INVENTARIOS)
+// MÓDULO: GESTIÓN DE LOCALES (INVENTARIOS)
 // ==========================================
 
 // 1. LISTADO Y ALTA
 if (isset($_GET['action']) && $_GET['action'] === 'ajustes_locales' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
 
+    // Procesar Alta de Local
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre'])) {
-        $stmt = $db->prepare("INSERT INTO locales (nombre, direccion, encargado_id) VALUES (?, ?, ?)");
-        $stmt->execute([
-            trim($_POST['nombre']),
-            trim($_POST['direccion']),
-            !empty($_POST['encargado_id']) ? $_POST['encargado_id'] : null
-        ]);
+        $stmt = $db->prepare("INSERT INTO locales (nombre, direccion, encargado_id, estado) VALUES (?, ?, ?, 1)");
+        $stmt->execute([trim($_POST['nombre']), $_POST['direccion'], $_POST['encargado_id']]);
         header("Location: index.php?action=ajustes_locales");
         exit;
     }
 
-    // Traemos los locales con el nombre del encargado
+    // CORRECCIÓN 1: Cambiamos 'encargado_nom' por 'encargado_nombre'
     $listaLocales = $db->query("SELECT l.*, u.nombre_completo as encargado_nombre 
                                 FROM locales l 
                                 LEFT JOIN usuarios u ON l.encargado_id = u.id 
-                                ORDER BY l.nombre ASC")->fetchAll();
-    
-    // Traemos los usuarios que pueden ser encargados (Admin y Encargados activos)
-    $listaUsuarios = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id <= 2 AND estado = 1 ORDER BY nombre_completo ASC")->fetchAll();
+                                ORDER BY l.id DESC")->fetchAll();
+
+    // CORRECCIÓN 2: Cambiamos la variable '$encargados' por '$listaUsuarios'
+    $listaUsuarios = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id = 2 AND estado = 1 ORDER BY nombre_completo ASC")->fetchAll();
 
     require_once __DIR__ . '/../src/Application/Views/ajustes_locales.php';
+    exit;
+}
+
+// 2. CAMBIAR ESTADO (ACTIVAR/DESACTIVAR)
+if (isset($_GET['action']) && $_GET['action'] === 'toggle_estado_local' && isset($_GET['id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    
+    $id = intval($_GET['id']);
+    $nuevo_estado = intval($_GET['st']) === 1 ? 0 : 1; // Si es 1 pasa a 0, si es 0 pasa a 1
+
+    $stmt = $db->prepare("UPDATE locales SET estado = ? WHERE id = ?");
+    $stmt->execute([$nuevo_estado, $id]);
+
+    header("Location: index.php?action=ajustes_locales");
     exit;
 }
 
@@ -1193,16 +1247,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'menu_graficos') {
 // MÓDULO: CIERRE DE ACTAS (EVALUACIÓN CLIENTE)
 // ==========================================
 
-// 1. EL ENCARGADO GENERA EL ACTA (Botón en el Monitor)
+// 1. EL USUARIO GENERA EL ACTA DESDE EL MODAL
 if (isset($_GET['action']) && $_GET['action'] === 'generar_acta' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
     
     $local_id = intval($_GET['local_id']);
-    $encargado_id = $_SESSION['usuario_id'];
+    // ⚠️ CAMBIO: Ahora el encargado viene del formulario (ventanita), no de la sesión
+    $encargado_id = intval($_GET['encargado_id']); 
     $token = bin2hex(random_bytes(16)); // Llave secreta
     
-    $stmt = $db->prepare("INSERT INTO evaluaciones (local_id, encargado_id, token_seguridad) VALUES (?, ?, ?)");
+    // ⚠️ CAMBIO: Insertamos en la tabla 'actas'
+    $stmt = $db->prepare("INSERT INTO actas (local_id, encargado_id, token_seguridad) VALUES (?, ?, ?)");
     $stmt->execute([$local_id, $encargado_id, $token]);
     
     header("Location: index.php?action=evaluacion_cliente&token=" . $token);
@@ -1214,13 +1270,13 @@ if (isset($_GET['action']) && $_GET['action'] === 'evaluacion_cliente') {
     $db = (new Database())->getConnection();
     $token = $_GET['token'] ?? '';
     
-    $stmt = $db->prepare("SELECT e.*, l.nombre as local_nombre FROM evaluaciones e JOIN locales l ON e.local_id = l.id WHERE e.token_seguridad = ?");
+    // ⚠️ CAMBIO: Buscamos en 'actas'
+    $stmt = $db->prepare("SELECT a.*, l.nombre as local_nombre FROM actas a JOIN locales l ON a.local_id = l.id WHERE a.token_seguridad = ?");
     $stmt->execute([$token]);
     $evaluacion = $stmt->fetch();
     
     if (!$evaluacion) { die("<h2 style='text-align:center; margin-top:50px; font-family:Arial;'>❌ Error: Acta inválida.</h2>"); }
     
-    // Si el ticket ya fue quemado
     if ($evaluacion['completada'] == 1) {
         die("<div style='text-align:center; margin-top:50px; font-family:Arial;'>
                 <h2>✔️ Acta Cerrada</h2>
@@ -1229,9 +1285,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'evaluacion_cliente') {
              </div>");
     }
 
-    // Si viene el POST del formulario con la firma
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['firma'])) {
-        $stmt = $db->prepare("UPDATE evaluaciones SET 
+        // ⚠️ CAMBIO: Actualizamos 'actas'
+        $stmt = $db->prepare("UPDATE actas SET 
             nombre_evaluador = ?, 
             estrellas_puntualidad = ?, 
             estrellas_organizacion = ?, 
@@ -1258,7 +1314,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'evaluacion_cliente') {
         exit;
     }
     
-    // Prohibir al navegador guardar la pantalla para que no puedan volver atrás
     header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
     require_once __DIR__ . '/../src/Application/Views/evaluacion_cliente.php';
     exit;
@@ -1275,6 +1330,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'evaluacion_exito') {
             <a href='index.php?action=dashboard' style='padding:15px 30px; background:#666; color:white; text-decoration:none; border-radius:8px; font-weight:bold;'>Salir al Menú Principal</a>
          </div>");
 }
+
+
 // 4. RANKING DE PIQUEADORES
 if (isset($_GET['action']) && $_GET['action'] === 'ranking_piqueadores') {
     if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
@@ -1297,6 +1354,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'ranking_piqueadores') {
     exit;
 }
 // ==========================================
+// ==========================================
+// NUEVO: MENÚ PRINCIPAL DE ACTAS - MODAL
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'actas_menu' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+    // Traemos los encargados activos para el Modal de "Nueva Acta"
+    $listaEncargados = $db->query("SELECT id, nombre_completo FROM usuarios WHERE rol_id = 2 AND estado = 1 ORDER BY nombre_completo ASC")->fetchAll();
+    // Traemos los locales activos para el Modal de "Nueva Acta"
+    $listaLocales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
+
+    require_once __DIR__ . '/../src/Application/Views/actas_menu.php';
+    exit;
+}
 // ==========================================
 // MÓDULO: CALENDARIO DE AUDITORÍAS (CON SINCRONIZACIÓN)
 // ==========================================
@@ -1332,33 +1403,36 @@ if (isset($_GET['action']) && $_GET['action'] === 'calendario') {
         ];
     }
 
-    // 2. MATEMÁTICA PARA LA TABLA (Calcular Domingo a Sábado)
-    $hoy = new DateTime();
-    $diaSemana = $hoy->format('w'); // 0 es Domingo, 6 es Sábado
+// 2. MATEMÁTICA PARA LA TABLA (Hoy + 30 días)
+    $hoyObj = new DateTime();
+    $hoy_sql = $hoyObj->format('Y-m-d'); // '2026-04-07'
     
-    $inicioSemana = clone $hoy;
-    $inicioSemana->modify("-{$diaSemana} days"); // Retrocede hasta el Domingo
-    $fecha_inicio = $inicioSemana->format('Y-m-d');
-    
-    $finSemana = clone $inicioSemana;
-    $finSemana->modify("+6 days"); // Avanza hasta el Sábado
-    $fecha_fin = $finSemana->format('Y-m-d');
+    $finPeriodo = clone $hoyObj;
+    $finPeriodo->modify("+30 days"); 
+    $fecha_fin = $finPeriodo->format('Y-m-d');
 
-    // 3. DATOS SOLO PARA LA TABLA DE ABAJO (Filtrado por semana)
+    // 3. DATOS PARA LA TABLA (Futuro + Pendientes del pasado)
     $stmt_tabla = $db->prepare("
         SELECT ap.id, ap.fecha_auditoria, ap.hora_auditoria, ap.local_id, ap.encargado_id, 
                l.nombre as local_nombre, u.nombre_completo as encargado_nombre, ap.estado
         FROM auditorias_programadas ap
         JOIN locales l ON ap.local_id = l.id
         JOIN usuarios u ON ap.encargado_id = u.id
-        WHERE ap.fecha_auditoria BETWEEN ? AND ?
+        WHERE 
+            (ap.fecha_auditoria BETWEEN :hoy AND :fin) 
+            OR (ap.fecha_auditoria < :hoy_mismo AND ap.estado = 'Pendiente')
         ORDER BY ap.fecha_auditoria ASC, ap.hora_auditoria ASC
     ");
-    $stmt_tabla->execute([$fecha_inicio, $fecha_fin]);
-    $eventos_db = $stmt_tabla->fetchAll(); // Acá se pisa la variable para que la tabla solo use estos
     
-    // Creamos un título bonito para mostrárselo al usuario
-    $titulo_semana = "Del " . $inicioSemana->format('d/m/Y') . " al " . $finSemana->format('d/m/Y');
+    $stmt_tabla->execute([
+        'hoy'       => $hoy_sql,
+        'fin'       => $fecha_fin,
+        'hoy_mismo' => $hoy_sql
+    ]);
+    $eventos_db = $stmt_tabla->fetchAll(); 
+    
+    // Título dinámico para la vista
+    $titulo_periodo = "Próximos 30 días y Pendientes (al " . $finPeriodo->format('d/m/Y') . ")";
 
     require_once __DIR__ . '/../src/Application/Views/calendario.php';
     exit;
