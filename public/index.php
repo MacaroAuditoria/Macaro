@@ -1449,6 +1449,98 @@ if (isset($_GET['action']) && $_GET['action'] === 'actas_menu' && isset($_SESSIO
     require_once __DIR__ . '/../src/Application/Views/actas_menu.php';
     exit;
 }
+
+// ==========================================
+// MÓDULO: IMPORTACIÓN DE CSV (LOYVERSE)
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado. Solo administradores."); }
+    $db = (new Database())->getConnection();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['archivo_csv'])) {
+        $archivo = $_FILES['archivo_csv']['tmp_name'];
+
+        if (($handle = fopen($archivo, "r")) !== FALSE) {
+            // 1. Leer la primera fila (los encabezados)
+            $headers = fgetcsv($handle, 1000, ","); 
+            
+            // Si viene separado por punto y coma (suele pasar si lo abren en Excel), cambiamos el delimitador
+            if (count($headers) == 1) {
+                fclose($handle);
+                $handle = fopen($archivo, "r");
+                $headers = fgetcsv($handle, 1000, ";");
+            }
+
+            // Normalizamos los títulos a minúsculas para que sea fácil buscarlos
+            $headers = array_map(function($h) { return strtolower(trim($h)); }, $headers);
+
+            // 2. Buscar en qué posición está cada columna de Loyverse
+            $idx_nombre = array_search('nombre del artículo', $headers);
+            if ($idx_nombre === false) $idx_nombre = array_search('item name', $headers);
+
+            $idx_codigo = array_search('código de barras', $headers);
+            if ($idx_codigo === false) $idx_codigo = array_search('barcode', $headers);
+
+            $idx_sku = array_search('sku', $headers);
+            
+            $idx_precio = array_search('precio', $headers);
+            if ($idx_precio === false) $idx_precio = array_search('price', $headers);
+
+            $idx_costo = array_search('costo', $headers);
+            if ($idx_costo === false) $idx_costo = array_search('cost', $headers);
+
+            // 3. Verificamos si encontramos lo mínimo indispensable
+            if ($idx_nombre === false || $idx_codigo === false) {
+                $error = "❌ El archivo no parece ser un CSV de Loyverse válido. Faltan las columnas 'Nombre del artículo' o 'Código de barras'.";
+            } else {
+                $insertados = 0;
+                $duplicados = 0;
+
+                $check_stmt = $db->prepare("SELECT id FROM productos WHERE codigo_barras = ?");
+                $insert_stmt = $db->prepare("INSERT INTO productos (codigo_barras, sku, descripcion, precio_compra, precio_venta) VALUES (:cb, :sku, :desc, :pc, :pv)");
+
+                // 4. Recorrer fila por fila e insertar
+                while (($datos = fgetcsv($handle, 1000, count($headers) > 1 ? "," : ";")) !== FALSE) {
+                    // Evitar filas vacías
+                    if (empty($datos) || count($datos) < 2) continue;
+
+                    $codigo = trim($datos[$idx_codigo]);
+                    $descripcion = trim(strtoupper($datos[$idx_nombre]));
+
+                    // Si no tiene código de barras, lo saltamos (MACARO necesita códigos para escanear)
+                    if (empty($codigo)) continue;
+
+                    // Verificamos si ya existe en la base de datos
+                    $check_stmt->execute([$codigo]);
+                    if (!$check_stmt->fetch()) {
+                        
+                        $sku = ($idx_sku !== false && isset($datos[$idx_sku])) ? trim($datos[$idx_sku]) : $codigo;
+                        $precio_venta = ($idx_precio !== false && isset($datos[$idx_precio])) ? floatval($datos[$idx_precio]) : null;
+                        $precio_compra = ($idx_costo !== false && isset($datos[$idx_costo])) ? floatval($datos[$idx_costo]) : null;
+
+                        $insert_stmt->execute([
+                            'cb' => $codigo,
+                            'sku' => $sku,
+                            'desc' => $descripcion,
+                            'pc' => $precio_compra,
+                            'pv' => $precio_venta
+                        ]);
+                        $insertados++;
+                    } else {
+                        $duplicados++;
+                    }
+                }
+                $exito = "✅ Importación exitosa. Se agregaron <strong>$insertados</strong> productos nuevos. ($duplicados ya existían).";
+            }
+            fclose($handle);
+        } else {
+            $error = "❌ No se pudo leer el archivo subido.";
+        }
+    }
+
+    require_once __DIR__ . '/../src/Application/Views/importar_csv.php';
+    exit;
+}
 // ==========================================
 // MÓDULO: CALENDARIO DE AUDITORÍAS (CON SINCRONIZACIÓN)
 // ==========================================

@@ -18,6 +18,13 @@
         <span class="menu-icon">🏢</span>
         <h3 class="menu-title">Inventarios (Locales)</h3>
     </a>
+
+    <a href="index.php?action=importar_csv" class="menu-card" style="text-decoration: none;">
+        <span class="menu-icon" style="font-size: 40px;">📁</span>
+        <h3 class="menu-title">Cargar Inventario CSV</h3>
+        <p style="color: #666; font-size: 13px;">Importar base de datos de clientes.</p>
+    </a>
+    
     <?php endif; ?>
 
     <a href="index.php?action=ajustes_sectores" class="menu-card" style="border: 1px solid #00897b;">
