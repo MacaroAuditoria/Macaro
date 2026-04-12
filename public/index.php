@@ -321,21 +321,25 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_reabrir_zona' && isse
 if (isset($_GET['action']) && $_GET['action'] === 'monitor_detalle_zona' && isset($_SESSION['usuario_id'])) {
     $db = (new Database())->getConnection();
     
-    // Agrupamos todos los conteos de ese producto en esa zona
+    $local_id = $_GET['local_id'];
+    $sector_id = !empty($_GET['sector_id']) ? $_GET['sector_id'] : null;
+    $zona_id = $_GET['zona_id'];
+    
+    // Traemos CADA registro individual escaneado con el nombre de quien lo hizo
     $stmt = $db->prepare("
-        SELECT c.codigo_barras, p.descripcion, SUM(c.cantidad) as total_producto
+        SELECT c.id, c.codigo_barras, c.cantidad, p.descripcion, u.nombre_completo as nombre_usuario
         FROM conteos c
         LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
-        WHERE c.local_id = ? AND c.sector_id = ? AND c.zona_id = ?
-        GROUP BY c.codigo_barras, p.descripcion
-        ORDER BY p.descripcion ASC
+        LEFT JOIN usuarios u ON c.usuario_id = u.id
+        WHERE c.local_id = ? AND c.sector_id <=> ? AND c.zona_id = ?
+        ORDER BY c.id DESC
     ");
-    $stmt->execute([$_GET['local_id'], $_GET['sector_id'], $_GET['zona_id']]);
+    $stmt->execute([$local_id, $sector_id, $zona_id]);
     $detalles = $stmt->fetchAll();
     
     // Nombres para el título
-    $local_nombre = $db->query("SELECT nombre FROM locales WHERE id = " . intval($_GET['local_id']))->fetchColumn();
-    $zona_nombre = $db->query("SELECT codigo FROM zonas WHERE id = " . intval($_GET['zona_id']))->fetchColumn();
+    $local_nombre = $db->query("SELECT nombre FROM locales WHERE id = " . intval($local_id))->fetchColumn();
+    $zona_nombre = $db->query("SELECT codigo FROM zonas WHERE id = " . intval($zona_id))->fetchColumn();
 
     require_once __DIR__ . '/../src/Application/Views/monitor_detalle.php';
     exit;
@@ -357,6 +361,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_vaciar_zona' && isset
     exit;
 }
 // ==========================================
+// ==========================================
+// MÓDULO: MONITOR - BORRAR ITEM ESPECÍFICO
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'monitor_borrar_item' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
+
+    $id_conteo = $_GET['id_conteo'] ?? null;
+    $local_id = $_GET['local_id'];
+    $sector_id = $_GET['sector_id'];
+    $zona_id = $_GET['zona_id'];
+
+    if ($id_conteo) {
+        $stmt = $db->prepare("DELETE FROM conteos WHERE id = ?");
+        $stmt->execute([$id_conteo]);
+    }
+
+    // Volvemos a la misma pantalla de detalle donde estábamos
+    header("Location: index.php?action=monitor_detalle_zona&local_id=$local_id&sector_id=$sector_id&zona_id=$zona_id&msj=borrado");
+    exit;
+}
+
 // ==========================================
 // MÓDULO DE PIQUEO (ZEBRA TC21)
 // ==========================================
@@ -1471,23 +1497,37 @@ if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESS
                 $headers = fgetcsv($handle, 1000, ";");
             }
 
-            // Normalizamos los títulos a minúsculas para que sea fácil buscarlos
-            $headers = array_map(function($h) { return strtolower(trim($h)); }, $headers);
+            // 2. BUSCADOR INTELIGENTE DE COLUMNAS (A prueba de balas)
+            $idx_nombre = false;
+            $idx_codigo = false;
+            $idx_sku = false;
+            $idx_precio = false;
+            $idx_costo = false;
 
-            // 2. Buscar en qué posición está cada columna de Loyverse
-            $idx_nombre = array_search('nombre del artículo', $headers);
-            if ($idx_nombre === false) $idx_nombre = array_search('item name', $headers);
+            foreach ($headers as $index => $columna) {
+                // Pasamos a minúsculas y le quitamos los acentos para no tener problemas
+                $col = strtolower(trim($columna));
+                $col = str_replace(['á','é','í','ó','ú'], ['a','e','i','o','u'], $col);
 
-            $idx_codigo = array_search('código de barras', $headers);
-            if ($idx_codigo === false) $idx_codigo = array_search('barcode', $headers);
-
-            $idx_sku = array_search('sku', $headers);
-            
-            $idx_precio = array_search('precio', $headers);
-            if ($idx_precio === false) $idx_precio = array_search('price', $headers);
-
-            $idx_costo = array_search('costo', $headers);
-            if ($idx_costo === false) $idx_costo = array_search('cost', $headers);
+                // Buscamos coincidencias flexibles
+                if ($col === 'nombre' || $col === 'nombre del articulo' || $col === 'item name') {
+                    $idx_nombre = $index;
+                }
+                if ($col === 'codigo de barras' || $col === 'barcode') {
+                    $idx_codigo = $index;
+                }
+                if ($col === 'ref' || $col === 'sku') {
+                    $idx_sku = $index;
+                }
+                if ($col === 'coste' || $col === 'costo' || $col === 'cost') {
+                    $idx_costo = $index;
+                }
+                // Como Loyverse le pega el nombre del local al precio (ej: "Precio [Mi Local]"), 
+                // buscamos cualquier columna que CONTENGA la palabra "precio" o "price"
+                if (strpos($col, 'precio') !== false || strpos($col, 'price') !== false) {
+                    $idx_precio = $index;
+                }
+            }
 
             // 3. Verificamos si encontramos lo mínimo indispensable
             if ($idx_nombre === false || $idx_codigo === false) {
