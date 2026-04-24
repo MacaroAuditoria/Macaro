@@ -15,7 +15,7 @@
 
 <div class="header">
     <div class="user-info">📥 Cierre y Exportación de Inventarios</div>
-    <a href="index.php?action=dashboard" class="btn-primario" style="background: #6c757d; text-decoration:none;">Volver al Inicio</a>
+    <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver</a>
 </div>
 
 <div class="caja-exportacion">

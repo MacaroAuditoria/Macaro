@@ -74,12 +74,24 @@
 
 <div class="container-abm">
     
+    <?php if (isset($error) && $error === 'auditoria_duplicada'): ?>
+        <div id="alertaCalendario" style="background-color: #ffebee; color: #c62828; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; font-size: 14px; border-left: 5px solid #c62828; max-width: 900px; margin-left: auto; margin-right: auto; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+            ⚠️ <strong>Acción bloqueada:</strong> El Inventario seleccionado ya tiene una auditoría "Pendiente". <br>
+            <span style="font-weight: normal; font-size: 13px;">Debe marcarla como Completada o Cancelada antes de agendar una nueva para ese mismo local.</span>
+        </div>
+        <script>
+            setTimeout(function() { 
+                var alerta = document.getElementById('alertaCalendario');
+                if (alerta) alerta.style.display = 'none'; 
+            }, 6000); // Lo dejamos 6 segundos para que de tiempo a leerlo bien
+        </script>
+    <?php endif; ?>
     <div id='calendar'></div>
 
     <div class="card-table" style="margin-top: 40px; border-top: 4px solid #673ab7; padding: 20px;">
         
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
-            <h3>Cronograma: <span style="color: #2196f3;"><?php echo $titulo_periodo; ?></span></h3>            
+            <h3>Cronograma: <span style="color: #2196f3;"><?php echo htmlspecialchars($titulo_periodo ?? ''); ?></span></h3>            
             <div class="barra-busqueda">
                 <input type="text" id="buscadorTexto" placeholder="🔍 Buscar por local o encargado...">
                 <select id="buscadorEstado">
@@ -119,7 +131,7 @@
                     <td class="col-encargado"><?php echo htmlspecialchars($e['encargado_nombre']); ?></td>
                     <td class="col-estado">
                         <span class="estado-badge bg-<?php echo strtolower($e['estado']); ?>">
-                            <?php echo $e['estado']; ?>
+                            <?php echo htmlspecialchars($e['estado']); ?>
                         </span>
                     </td>
                     <td>
@@ -265,6 +277,12 @@
         if (params.get('res') === 'editado') alert("✏️ Auditoría actualizada.");
         if (params.get('res') === 'cancelado') alert("❌ Auditoría cancelada.");
 
+        // Limpiar URL si hay errores para que al refrescar no vuelva a saltar el cartel
+        if (params.has('error')) {
+            const nuevaUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?action=calendario";
+            window.history.replaceState({path: nuevaUrl}, '', nuevaUrl);
+        }
+
         // --- LÓGICA DEL BUSCADOR EN VIVO ---
         const inputBusqueda = document.getElementById('buscadorTexto');
         const selectEstado = document.getElementById('buscadorEstado');
@@ -275,20 +293,15 @@
             const estado = selectEstado.value.toLowerCase();
 
             filasTabla.forEach(fila => {
-                // Si es la fila de "No hay auditorías", la ignoramos
                 if (fila.id === 'filaVacia') return;
 
-                // Obtenemos los textos de la fila
                 const nombreLocal = fila.querySelector('.col-local').textContent.toLowerCase();
                 const nombreEncargado = fila.querySelector('.col-encargado').textContent.toLowerCase();
                 const estadoLocal = fila.querySelector('.col-estado').textContent.toLowerCase().trim();
 
-                // Chequeamos si el texto coincide (buscamos en local o encargado)
                 const coincideTexto = nombreLocal.includes(texto) || nombreEncargado.includes(texto);
-                // Chequeamos si el estado coincide
                 const coincideEstado = (estado === "" || estadoLocal === estado);
 
-                // Mostramos u ocultamos la fila
                 if (coincideTexto && coincideEstado) {
                     fila.style.display = '';
                 } else {
@@ -297,7 +310,6 @@
             });
         }
 
-        // Ejecutamos la función cada vez que escriben o cambian el estado
         inputBusqueda.addEventListener('keyup', filtrarTabla);
         selectEstado.addEventListener('change', filtrarTabla);
     });

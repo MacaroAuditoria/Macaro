@@ -105,77 +105,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'eliminar_categoria' && isset(
     exit;
 }
 // ==========================================
-// MÓDULO DE DISTRIBUIDORES (ABM COMPLETO)
-// ==========================================
-
-// 1. ALTA Y LECTURA
-if (isset($_GET['action']) && $_GET['action'] === 'distribuidores' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
-    $db = (new Database())->getConnection();
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nuevo_distribuidor'])) {
-        try {
-            $stmt = $db->prepare("INSERT INTO distribuidores (nombre) VALUES (:nombre)");
-            $stmt->execute(['nombre' => trim($_POST['nuevo_distribuidor'])]);
-            header("Location: index.php?action=distribuidores");
-            exit;
-        } catch (Exception $e) {
-            $error = "El distribuidor ya existe o hubo un error.";
-        }
-    }
-    
-    // 👇 ACÁ ESTÁ EL CAMBIO: Cambiamos 'ORDER BY nombre ASC' por 'ORDER BY id DESC'
-    $stmt = $db->query("SELECT id, nombre FROM distribuidores ORDER BY id DESC");
-    $listaDistribuidores = $stmt->fetchAll();
-    
-    require_once __DIR__ . '/../src/Application/Views/distribuidores.php';
-    exit;
-}
-
-// 2. MODIFICACIÓN (EDICIÓN)
-if (isset($_GET['action']) && $_GET['action'] === 'editar_distribuidor' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
-    $db = (new Database())->getConnection();
-
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre']) && !empty($_POST['id'])) {
-        try {
-            $stmt = $db->prepare("UPDATE distribuidores SET nombre = :nombre WHERE id = :id");
-            $stmt->execute(['nombre' => trim($_POST['nombre']), 'id' => $_POST['id']]);
-            header("Location: index.php?action=distribuidores"); 
-            exit;
-        } catch (Exception $e) {
-            $error = "El distribuidor ya existe o hubo un error.";
-        }
-    }
-    if (isset($_GET['id'])) {
-        $stmt = $db->prepare("SELECT id, nombre FROM distribuidores WHERE id = :id");
-        $stmt->execute(['id' => $_GET['id']]);
-        $distActual = $stmt->fetch();
-        if ($distActual) {
-            require_once __DIR__ . '/../src/Application/Views/editar_distribuidor.php';
-            exit;
-        }
-    }
-    header("Location: index.php?action=distribuidores");
-    exit;
-}
-
-// 3. BAJA (ELIMINACIÓN)
-if (isset($_GET['action']) && $_GET['action'] === 'eliminar_distribuidor' && isset($_SESSION['usuario_id'])) {
-    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
-    if (isset($_GET['id'])) {
-        $db = (new Database())->getConnection();
-        try {
-            $stmt = $db->prepare("DELETE FROM distribuidores WHERE id = :id");
-            $stmt->execute(['id' => $_GET['id']]);
-        } catch (Exception $e) {
-            die("<div style='padding:20px; font-family:Arial;'><h3>❌ Error</h3><p>No se puede eliminar este distribuidor porque ya tiene productos asociados en el catálogo.</p><a href='index.php?action=distribuidores'>Volver atrás</a></div>");
-        }
-    }
-    header("Location: index.php?action=distribuidores");
-    exit;
-}
-// ==========================================
 // MÓDULO: GESTIÓN DE ACTAS Y RENDIMIENTO (ADMIN)
 // ==========================================
 if (isset($_GET['action']) && in_array($_GET['action'], ['actas_buscar', 'acta_ver', 'progreso_encargado'])) {
@@ -297,12 +226,24 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_zonas') {
 if (isset($_POST['action']) && $_POST['action'] === 'zonas_crear_rapido' && isset($_SESSION['usuario_id'])) {
     $db = (new Database())->getConnection();
     $codigo_nuevo = trim(strtoupper($_POST['nuevo_codigo'])); 
+    $local_id = $_POST['local_id'];
+    $sector_id = $_POST['sector_id'];
     
-    // Ahora guardamos la zona ATADA al local y sector exactos
+    // 1. VERIFICACIÓN: Buscamos si ya existe esa zona en ese local y sector
+    $check_stmt = $db->prepare("SELECT id FROM zonas WHERE codigo = ? AND local_id = ? AND sector_id = ?");
+    $check_stmt->execute([$codigo_nuevo, $local_id, $sector_id]);
+    
+    if ($check_stmt->fetch()) {
+        // Si ya existe, cancelamos la creación y redirigimos con un mensaje de error por URL
+        header("Location: index.php?action=monitor_zonas&local_id=" . $local_id . "&sector_id=" . $sector_id . "&error=zona_duplicada");
+        exit;
+    }
+    
+    // 2. Si pasó la prueba (no existe), guardamos la zona
     $stmt = $db->prepare("INSERT INTO zonas (codigo, local_id, sector_id) VALUES (?, ?, ?)");
-    $stmt->execute([$codigo_nuevo, $_POST['local_id'], $_POST['sector_id']]);
+    $stmt->execute([$codigo_nuevo, $local_id, $sector_id]);
     
-    header("Location: index.php?action=monitor_zonas&local_id=" . $_POST['local_id'] . "&sector_id=" . $_POST['sector_id']);
+    header("Location: index.php?action=monitor_zonas&local_id=" . $local_id . "&sector_id=" . $sector_id);
     exit;
 }
 
@@ -358,6 +299,55 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_vaciar_zona' && isset
     $stmt2->execute([$_GET['local_id'], $_GET['sector_id'], $_GET['zona_id']]);
     
     header("Location: index.php?action=monitor_zonas&local_id=" . $_GET['local_id'] . "&sector_id=" . $_GET['sector_id']);
+    exit;
+}
+// ==========================================
+// MÓDULO: ELIMINAR ZONA (BORRADO COMPLETO)
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'monitor_eliminar_zona' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); } // Solo admins o encargados
+    $db = (new Database())->getConnection();
+    
+    $zona_id = $_GET['zona_id'];
+    $local_id = $_GET['local_id'];
+    $sector_id = $_GET['sector_id'];
+
+    // 1. Por seguridad en la base de datos, primero borramos todos los conteos de esa zona
+    $stmt_conteos = $db->prepare("DELETE FROM conteo_productos WHERE zona_id = ?");
+    $stmt_conteos->execute([$zona_id]);
+
+    // 2. Ahora sí, borramos la zona definitivamente de la lista
+    $stmt_zona = $db->prepare("DELETE FROM zonas WHERE id = ?");
+    $stmt_zona->execute([$zona_id]);
+
+    // Redirigimos de vuelta al monitor en el mismo sector
+    header("Location: index.php?action=monitor_zonas&local_id=" . $local_id . "&sector_id=" . $sector_id);
+    exit;
+}
+// ==========================================
+// MÓDULO: IMPRIMIR ETIQUETAS DE ZONAS
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'imprimir_zonas' && isset($_SESSION['usuario_id'])) {
+    $db = (new Database())->getConnection();
+    //die("¡LLEGUÉ AL INDEX PERFECTAMENTE!");    
+    // Agarramos el local y sector que el usuario estaba mirando
+    $local_id = $_GET['local_id'] ?? 0;
+    $sector_id = $_GET['sector_id'] ?? 0;
+
+    // Buscamos todas las zonas reales de ese sector ordenadas alfabéticamente
+    $stmt = $db->prepare("SELECT codigo FROM zonas WHERE local_id = ? AND sector_id = ? ORDER BY codigo ASC");
+    $stmt->execute([$local_id, $sector_id]);
+    
+    // Guardamos solo los códigos (ej: A0001, A0002) en un arreglo simple
+    $lista_zonas = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    // Si no hay zonas, le avisamos
+    if (empty($lista_zonas)) {
+        die("❌ No hay zonas creadas en este sector para imprimir. Volvé atrás y creá algunas primero.");
+    }
+
+    // Le pasamos la pelota al archivo visual que vos creaste
+    require_once __DIR__ . '/../src/Application/Views/imprimir_zonas.php';
     exit;
 }
 // ==========================================
@@ -563,13 +553,40 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
             $prod = $check_prod->fetch();
 
             if ($prod) {
-                // SI EXISTE: Recién ahora lo guardamos en la base de datos
-                $stmt = $db->prepare("INSERT INTO conteos (local_id, sector_id, zona_id, usuario_id, codigo_barras, cantidad) VALUES (?, ?, ?, ?, ?, ?)");
-                $stmt->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $_SESSION['usuario_id'], $codigo, $cantidad]);
+                // SI EXISTE: Tenemos que averiguar a qué Auditoría pertenece este piqueo
+                $auditoria_activa_id = null;
+                
+                // Buscamos si hay una auditoría "Pendiente" en este local
+                $stmt_auditoria = $db->prepare("SELECT id FROM auditorias_programadas WHERE local_id = ? AND estado = 'Pendiente' LIMIT 1");
+                $stmt_auditoria->execute([$_SESSION['piqueo']['local_id']]);
+                $auditoria = $stmt_auditoria->fetch();
+                
+                if ($auditoria) {
+                    $auditoria_activa_id = $auditoria['id'];
+                }
 
-                // Calculamos total de ese ítem
-                $stmt_item = $db->prepare("SELECT SUM(cantidad) FROM conteos WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND codigo_barras = ?");
-                $stmt_item->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $codigo]);
+                // Ahora sí lo guardamos en la base de datos (con el auditoria_id incluido)
+                $stmt = $db->prepare("INSERT INTO conteos (auditoria_id, local_id, sector_id, zona_id, usuario_id, codigo_barras, cantidad) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([
+                    $auditoria_activa_id,
+                    $_SESSION['piqueo']['local_id'], 
+                    $_SESSION['piqueo']['sector_id'], 
+                    $_SESSION['piqueo']['zona_id'], 
+                    $_SESSION['usuario_id'], 
+                    $codigo, 
+                    $cantidad
+                ]);
+
+                // Calculamos total de ese ítem (ahora filtramos también por la auditoría activa si la hay)
+                if ($auditoria_activa_id) {
+                    $stmt_item = $db->prepare("SELECT SUM(cantidad) FROM conteos WHERE auditoria_id = ? AND local_id = ? AND sector_id <=> ? AND zona_id = ? AND codigo_barras = ?");
+                    $stmt_item->execute([$auditoria_activa_id, $_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $codigo]);
+                } else {
+                    // Por las dudas, si alguien piquea sin auditoría (no debería pasar, pero para que no se rompa)
+                    $stmt_item = $db->prepare("SELECT SUM(cantidad) FROM conteos WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND codigo_barras = ?");
+                    $stmt_item->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $codigo]);
+                }
+                
                 $total_item = number_format($stmt_item->fetchColumn(), 2, '.', '');
 
                 $mensaje_estado = "
@@ -608,14 +625,31 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
     }
     
     // --- CÁLCULO DEL TOTAL ---
-    $stmt_total = $db->prepare("SELECT SUM(c.cantidad) FROM conteos c 
-                                INNER JOIN productos p ON c.codigo_barras = p.codigo_barras 
-                                WHERE c.zona_id = ? AND c.local_id = ? AND c.sector_id <=> ?");
-    $stmt_total->execute([
-        $_SESSION['piqueo']['zona_id'], 
-        $_SESSION['piqueo']['local_id'], 
-        $_SESSION['piqueo']['sector_id']
-    ]);
+    // Buscamos de nuevo la auditoría pendiente (o podés usar la misma variable si la definís más arriba, pero así es más seguro)
+    $stmt_aud = $db->prepare("SELECT id FROM auditorias_programadas WHERE local_id = ? AND estado = 'Pendiente' LIMIT 1");
+    $stmt_aud->execute([$_SESSION['piqueo']['local_id']]);
+    $aud_activa = $stmt_aud->fetch();
+    
+    if ($aud_activa) {
+        $stmt_total = $db->prepare("SELECT SUM(c.cantidad) FROM conteos c 
+                                    INNER JOIN productos p ON c.codigo_barras = p.codigo_barras 
+                                    WHERE c.auditoria_id = ? AND c.zona_id = ? AND c.local_id = ? AND c.sector_id <=> ?");
+        $stmt_total->execute([
+            $aud_activa['id'],
+            $_SESSION['piqueo']['zona_id'], 
+            $_SESSION['piqueo']['local_id'], 
+            $_SESSION['piqueo']['sector_id']
+        ]);
+    } else {
+        $stmt_total = $db->prepare("SELECT SUM(c.cantidad) FROM conteos c 
+                                    INNER JOIN productos p ON c.codigo_barras = p.codigo_barras 
+                                    WHERE c.zona_id = ? AND c.local_id = ? AND c.sector_id <=> ?");
+        $stmt_total->execute([
+            $_SESSION['piqueo']['zona_id'], 
+            $_SESSION['piqueo']['local_id'], 
+            $_SESSION['piqueo']['sector_id']
+        ]);
+    }
     
     $total_zona = $stmt_total->fetchColumn();
     $total_zona = $total_zona ? number_format($total_zona, 2, '.', '') : "0.00";
@@ -789,23 +823,36 @@ if (isset($_GET['action']) && $_GET['action'] === 'ajustes_sectores' && isset($_
     $db = (new Database())->getConnection();
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre']) && !empty($_POST['local_id'])) {
+        $local_id = $_POST['local_id'];
+        $nombre_sector = trim(strtoupper($_POST['nombre'])); // Forzamos a mayúsculas
+
+        // BARRERA DE SEGURIDAD: Buscamos si ya existe en ese local
+        $check_stmt = $db->prepare("SELECT id FROM sectores WHERE local_id = ? AND nombre = ?");
+        $check_stmt->execute([$local_id, $nombre_sector]);
+        
+        if ($check_stmt->fetch()) {
+            // Si encuentra uno igual, cancela y manda la señal de error a la pantalla
+            header("Location: index.php?action=ajustes_sectores&error=sector_duplicado");
+            exit;
+        }
+
+        // Si pasó la prueba (no existe), lo insertamos en la base de datos
         $stmt = $db->prepare("INSERT INTO sectores (nombre, local_id) VALUES (?, ?)");
         $stmt->execute([
-            trim($_POST['nombre']),
-            $_POST['local_id']
+            $nombre_sector,
+            $local_id
         ]);
         header("Location: index.php?action=ajustes_sectores");
         exit;
     }
 
     // Traemos los sectores y le pegamos el nombre del local al que pertenecen
-    // (Esto ya lo habías arreglado perfecto con el ORDER BY s.id DESC)
     $listaSectores = $db->query("SELECT s.*, l.nombre as local_nombre 
                                  FROM sectores s 
                                  LEFT JOIN locales l ON s.local_id = l.id 
                                  ORDER BY s.id DESC")->fetchAll();
     
-    // ---> CORRECCIÓN 1: Traemos los locales activos para armar el menú desplegable
+    // Traemos los locales activos para armar el menú desplegable
     $listaLocales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
 
     require_once __DIR__ . '/../src/Application/Views/ajustes_sectores.php';
@@ -820,7 +867,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'editar_sector' && isset($_SES
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['id']) && !empty($_POST['nombre']) && !empty($_POST['local_id'])) {
         $stmt = $db->prepare("UPDATE sectores SET nombre = ?, local_id = ? WHERE id = ?");
         $stmt->execute([
-            trim($_POST['nombre']),
+            trim(strtoupper($_POST['nombre'])), // También en mayúsculas al editar
             $_POST['local_id'],
             $_POST['id']
         ]);
@@ -832,7 +879,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'editar_sector' && isset($_SES
     $stmt->execute([$_GET['id']]);
     $sector = $stmt->fetch();
     
-    // ---> CORRECCIÓN 2: Filtro de locales activos también en la ventana de edición
+    // Filtro de locales activos también en la ventana de edición
     $listaLocales = $db->query("SELECT id, nombre FROM locales WHERE estado = 1 ORDER BY nombre ASC")->fetchAll();
 
     require_once __DIR__ . '/../src/Application/Views/editar_sector.php';
@@ -864,9 +911,25 @@ if (isset($_GET['action']) && $_GET['action'] === 'ajustes_locales' && isset($_S
     $db = (new Database())->getConnection();
 
     // Procesar Alta de Local
+    // Procesar Alta de Local
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre'])) {
+        $nombre_local = trim(strtoupper($_POST['nombre'])); // Forzamos mayúsculas para evitar dobles (ej: Centro y CENTRO)
+        $direccion = trim($_POST['direccion']);
+        $encargado_id = !empty($_POST['encargado_id']) ? $_POST['encargado_id'] : null;
+
+        // BARRERA DE SEGURIDAD: Buscamos si ya existe
+        $check_stmt = $db->prepare("SELECT id FROM locales WHERE nombre = ?");
+        $check_stmt->execute([$nombre_local]);
+        
+        if ($check_stmt->fetch()) {
+            // Si ya existe, abortamos y mandamos la señal de error
+            header("Location: index.php?action=ajustes_locales&error=local_duplicado");
+            exit;
+        }
+
+        // Si pasó la prueba, lo guardamos
         $stmt = $db->prepare("INSERT INTO locales (nombre, direccion, encargado_id, estado) VALUES (?, ?, ?, 1)");
-        $stmt->execute([trim($_POST['nombre']), $_POST['direccion'], $_POST['encargado_id']]);
+        $stmt->execute([$nombre_local, $direccion, $encargado_id]);
         header("Location: index.php?action=ajustes_locales");
         exit;
     }
@@ -989,18 +1052,17 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
         // ========================================================
         // OPCIÓN 2: UNIFICADO (Suma total del local, sin Zonas)
         // ========================================================
-        fputcsv($output, ['Código de Barras', 'SKU', 'Nombre del Producto', 'Marca', 'Cantidad Total', 'Precio Compra', 'Precio Venta', 'Categoría', 'Distribuidor'], ';');
+        fputcsv($output, ['Código de Barras', 'SKU', 'Nombre del Producto', 'Marca', 'Cantidad Total', 'Categoría'], ';');
         
         $sql = "SELECT 
                     c.codigo_barras, p.sku, p.descripcion, p.marca,
                     SUM(c.cantidad) as cantidad_total,
-                    p.precio_compra, p.precio_venta, cat.nombre as categoria_nombre, dist.nombre as distribuidor_nombre
+                    cat.nombre as categoria_nombre
                 FROM conteos c
                 LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
-                LEFT JOIN distribuidores dist ON p.distribuidor_id = dist.id
                 WHERE c.local_id = ?
-                GROUP BY c.codigo_barras, p.sku, p.descripcion, p.marca, p.precio_compra, p.precio_venta, cat.nombre, dist.nombre
+                GROUP BY c.codigo_barras, p.sku, p.descripcion, p.marca, cat.nombre
                 ORDER BY p.descripcion ASC";
                 
         $stmt = $db->prepare($sql);
@@ -1010,34 +1072,29 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
             $codigo_excel = '="' . $row['codigo_barras'] . '"';
             $sku = !empty($row['sku']) ? $row['sku'] : '-';
             $marca = !empty($row['marca']) ? $row['marca'] : '-';
-            $precio_c = !empty($row['precio_compra']) ? $row['precio_compra'] : '0.00';
-            $precio_v = !empty($row['precio_venta']) ? $row['precio_venta'] : '0.00';
             $categoria = !empty($row['categoria_nombre']) ? $row['categoria_nombre'] : 'Sin Categoría';
-            $distribuidor = !empty($row['distribuidor_nombre']) ? $row['distribuidor_nombre'] : 'Sin Distribuidor';
-            
-            fputcsv($output, [$codigo_excel, $sku, $row['descripcion'], $marca, number_format($row['cantidad_total'], 2, '.', ''), $precio_c, $precio_v, $categoria, $distribuidor], ';'); 
+                        
+            fputcsv($output, [$codigo_excel, $sku, $row['descripcion'], $marca, number_format($row['cantidad_total'], 2, '.', ''), $categoria], ';'); 
         }
 
     } elseif ($tipo_reporte === 'datos') {
         // ========================================================
         // OPCIÓN 3: DATOS CRUDOS (Para importación)
-        // Pedido: Código de Barras, SKU, Cantidad, Precio Venta, Precio Compra, Categoría, Marca
+        // Pedido: Código de Barras, SKU, Cantidad, Categoría, Marca
         // ========================================================
-        fputcsv($output, ['Código de Barras', 'SKU', 'Cantidad', 'Precio Venta', 'Precio Compra', 'Categoría', 'Marca'], ';');
+        fputcsv($output, ['Código de Barras', 'SKU', 'Cantidad', 'Categoría', 'Marca'], ';');
         
         $sql = "SELECT 
                     c.codigo_barras, 
                     p.sku, 
-                    SUM(c.cantidad) as cantidad_total, 
-                    p.precio_venta, 
-                    p.precio_compra, 
+                    SUM(c.cantidad) as cantidad_total,  
                     cat.nombre as categoria_nombre, 
                     p.marca 
                 FROM conteos c
                 LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
                 WHERE c.local_id = ? 
-                GROUP BY c.codigo_barras, p.sku, p.precio_venta, p.precio_compra, cat.nombre, p.marca";
+                GROUP BY c.codigo_barras, p.sku, cat.nombre, p.marca";
                 
         $stmt = $db->prepare($sql);
         $stmt->execute([$local_id]);
@@ -1046,16 +1103,12 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
             $codigo_excel = '="' . $row['codigo_barras'] . '"'; 
             $sku = !empty($row['sku']) ? $row['sku'] : '-';
             $marca = !empty($row['marca']) ? $row['marca'] : '-';
-            $precio_v = !empty($row['precio_venta']) ? $row['precio_venta'] : '0.00';
-            $precio_c = !empty($row['precio_compra']) ? $row['precio_compra'] : '0.00';
             $categoria = !empty($row['categoria_nombre']) ? $row['categoria_nombre'] : 'Sin Categoría';
 
             fputcsv($output, [
                 $codigo_excel, 
                 $sku, 
                 number_format($row['cantidad_total'], 2, '.', ''), 
-                $precio_v, 
-                $precio_c, 
                 $categoria, 
                 $marca
             ], ';');
@@ -1065,21 +1118,20 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
         // ========================================================
         // OPCIÓN 1: DETALLADO (Separado por Zona y Sector)
         // ========================================================
-        fputcsv($output, ['Código de Barras', 'SKU', 'Nombre del Producto', 'Marca', 'Cantidad Total', 'Sector', 'Zona', 'Precio Compra', 'Precio Venta', 'Categoría', 'Distribuidor'], ';');
+        fputcsv($output, ['Código de Barras', 'SKU', 'Nombre del Producto', 'Marca', 'Cantidad Total', 'Sector', 'Zona', 'Categoría'], ';');
         
         $sql = "SELECT 
                     c.codigo_barras, p.sku, p.descripcion, p.marca,
                     SUM(c.cantidad) as cantidad_total,
                     s.nombre as sector_nombre, z.codigo as zona_codigo,
-                    p.precio_compra, p.precio_venta, cat.nombre as categoria_nombre, dist.nombre as distribuidor_nombre
+                    cat.nombre as categoria_nombre
                 FROM conteos c
                 LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
                 LEFT JOIN zonas z ON c.zona_id = z.id
                 LEFT JOIN sectores s ON c.sector_id = s.id
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
-                LEFT JOIN distribuidores dist ON p.distribuidor_id = dist.id
                 WHERE c.local_id = ?
-                GROUP BY c.zona_id, c.sector_id, c.codigo_barras, p.sku, p.descripcion, p.marca, z.codigo, s.nombre, p.precio_compra, p.precio_venta, cat.nombre, dist.nombre
+                GROUP BY c.zona_id, c.sector_id, c.codigo_barras, p.sku, p.descripcion, p.marca, z.codigo, s.nombre, cat.nombre
                 ORDER BY s.nombre ASC, z.codigo ASC, p.descripcion ASC";
                 
         $stmt = $db->prepare($sql);
@@ -1089,12 +1141,9 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
             $codigo_excel = '="' . $row['codigo_barras'] . '"';
             $sku = !empty($row['sku']) ? $row['sku'] : '-';
             $marca = !empty($row['marca']) ? $row['marca'] : '-';
-            $precio_c = !empty($row['precio_compra']) ? $row['precio_compra'] : '0.00';
-            $precio_v = !empty($row['precio_venta']) ? $row['precio_venta'] : '0.00';
             $categoria = !empty($row['categoria_nombre']) ? $row['categoria_nombre'] : 'Sin Categoría';
-            $distribuidor = !empty($row['distribuidor_nombre']) ? $row['distribuidor_nombre'] : 'Sin Distribuidor';
             
-            fputcsv($output, [$codigo_excel, $sku, $row['descripcion'], $marca, number_format($row['cantidad_total'], 2, '.', ''), $row['sector_nombre'], $row['zona_codigo'], $precio_c, $precio_v, $categoria, $distribuidor], ';'); 
+            fputcsv($output, [$codigo_excel, $sku, $row['descripcion'], $marca, number_format($row['cantidad_total'], 2, '.', ''), $row['sector_nombre'], $row['zona_codigo'], $categoria], ';'); 
         }
     }
     
@@ -1122,8 +1171,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_alta' && isset($_SE
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['codigo_barras'])) {
         try {
             // Agregamos los nuevos campos a la consulta SQL
-            $sql = "INSERT INTO productos (codigo_barras, sku, descripcion, marca, precio_compra, precio_venta, categoria_id, distribuidor_id) 
-                    VALUES (:codigo_barras, :sku, :descripcion, :marca, :precio_compra, :precio_venta, :categoria_id, :distribuidor_id)";
+            $sql = "INSERT INTO productos (codigo_barras, sku, descripcion, marca, categoria_id) 
+                    VALUES (:codigo_barras, :sku, :descripcion, :marca, :categoria_id)";
             $stmt = $db->prepare($sql);
             
             $stmt->execute([
@@ -1131,10 +1180,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_alta' && isset($_SE
                 'sku' => trim($_POST['sku']), // Ahora es obligatorio
                 'descripcion' => trim(strtoupper($_POST['descripcion'])), // Mayúsculas para mantener proljo el catálogo
                 'marca' => !empty($_POST['marca']) ? trim(strtoupper($_POST['marca'])) : null,
-                'precio_compra' => !empty($_POST['precio_compra']) ? floatval($_POST['precio_compra']) : null,
-                'precio_venta' => !empty($_POST['precio_venta']) ? floatval($_POST['precio_venta']) : null,
-                'categoria_id' => !empty($_POST['categoria_id']) ? intval($_POST['categoria_id']) : null,
-                'distribuidor_id' => !empty($_POST['distribuidor_id']) ? intval($_POST['distribuidor_id']) : null
+                'categoria_id' => !empty($_POST['categoria_id']) ? intval($_POST['categoria_id']) : null
             ]);
             $exito = "✅ Producto guardado exitosamente. ¡Podés ingresar otro!";
         } catch (Exception $e) { 
@@ -1143,11 +1189,46 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_alta' && isset($_SE
     }
 
     $listaCategorias = $db->query("SELECT id, nombre FROM categorias ORDER BY nombre ASC")->fetchAll();
-    $listaDistribuidores = $db->query("SELECT id, nombre FROM distribuidores ORDER BY nombre ASC")->fetchAll();
+
     require_once __DIR__ . '/../src/Application/Views/productos_alta.php';
     exit;
 }
+// ==========================================
+// MÓDULO: EXPORTAR PRODUCTOS A CSV
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'productos_exportar_csv' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    $db = (new Database())->getConnection();
 
+    // Traemos todos los productos con los nombres de su categoría 
+    $productos = $db->query("
+        SELECT p.codigo_barras, p.sku, p.descripcion, p.marca, 
+               c.nombre as categoria 
+        FROM productos p 
+        LEFT JOIN categorias c ON p.categoria_id = c.id 
+        ORDER BY p.descripcion ASC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+
+    // Configuramos las cabeceras para forzar la descarga del archivo CSV
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=catalogo_productos_' . date('Ymd_His') . '.csv');
+
+    $salida = fopen('php://output', 'w');
+    
+    // Este código (BOM) fuerza a Excel a leer correctamente las tildes y las eñes
+    fprintf($salida, chr(0xEF).chr(0xBB).chr(0xBF));
+    
+    // Escribimos los títulos de las columnas (separados por punto y coma)
+    fputcsv($salida, ['Código de Barras', 'SKU', 'Descripción', 'Marca', 'Categoría'], ';');
+
+    // Recorremos los productos y los metemos fila por fila
+    foreach ($productos as $p) {
+        fputcsv($salida, $p, ';');
+    }
+
+    fclose($salida);
+    exit;
+}
 // ==========================================
 // MÓDULO: GESTIÓN DE PRODUCTOS (BUSCADOR EN TIEMPO REAL)
 // ==========================================
@@ -1156,12 +1237,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_gestion' && isset($
     $db = (new Database())->getConnection();
 
     // Traemos TODOS los productos para alimentar el buscador en tiempo real de JavaScript.
-    // Cruzamos los datos con categorías y distribuidores para obtener los nombres reales.
+    // Cruzamos los datos con categorías para obtener los nombres reales.
     $listaProductos = $db->query("
-        SELECT p.*, c.nombre as categoria_nombre, d.nombre as distribuidor_nombre 
+        SELECT p.*, c.nombre as categoria_nombre
         FROM productos p 
         LEFT JOIN categorias c ON p.categoria_id = c.id 
-        LEFT JOIN distribuidores d ON p.distribuidor_id = d.id 
         ORDER BY p.id DESC
     ")->fetchAll();
 
@@ -1183,8 +1263,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_
         try {
             $sql = "UPDATE productos SET 
                     codigo_barras = :cb, sku = :sku, descripcion = :desc, 
-                    marca = :marca, precio_compra = :pc, precio_venta = :pv, 
-                    categoria_id = :cat, distribuidor_id = :dist 
+                    marca = :marca, 
+                    categoria_id = :cat
                     WHERE id = :id";
             
             $stmt = $db->prepare($sql);
@@ -1193,10 +1273,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_
                 'sku'   => trim($_POST['sku']),
                 'desc'  => trim(strtoupper($_POST['descripcion'])),
                 'marca' => !empty($_POST['marca']) ? trim(strtoupper($_POST['marca'])) : null,
-                'pc'    => !empty($_POST['precio_compra']) ? floatval($_POST['precio_compra']) : null,
-                'pv'    => !empty($_POST['precio_venta']) ? floatval($_POST['precio_venta']) : null,
                 'cat'   => !empty($_POST['categoria_id']) ? intval($_POST['categoria_id']) : null,
-                'dist'  => !empty($_POST['distribuidor_id']) ? intval($_POST['distribuidor_id']) : null,
                 'id'    => $id
             ]);
             
@@ -1219,7 +1296,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_
     if (!$p) { die("Producto no encontrado."); }
 
     $listaCategorias = $db->query("SELECT id, nombre FROM categorias ORDER BY nombre ASC")->fetchAll();
-    $listaDistribuidores = $db->query("SELECT id, nombre FROM distribuidores ORDER BY nombre ASC")->fetchAll();
     
     require_once __DIR__ . '/../src/Application/Views/productos_editar.php';
     exit;
@@ -1477,7 +1553,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'actas_menu' && isset($_SESSIO
 }
 
 // ==========================================
-// MÓDULO: IMPORTACIÓN DE CSV (LOYVERSE)
+// MÓDULO: IMPORTACIÓN DE CSV (LOYVERSE Y MACARO)
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] != 1) { die("Acceso denegado. Solo administradores."); }
@@ -1487,30 +1563,32 @@ if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESS
         $archivo = $_FILES['archivo_csv']['tmp_name'];
 
         if (($handle = fopen($archivo, "r")) !== FALSE) {
-            // 1. Leer la primera fila (los encabezados)
-            $headers = fgetcsv($handle, 1000, ","); 
+            // 1. Leer la primera fila y detectar el delimitador correcto
+            $delimitador = ",";
+            $headers = fgetcsv($handle, 1000, $delimitador); 
             
-            // Si viene separado por punto y coma (suele pasar si lo abren en Excel), cambiamos el delimitador
-            if (count($headers) == 1) {
+            // Si viene separado por punto y coma, cambiamos el delimitador
+            if (count($headers) <= 1) {
                 fclose($handle);
                 $handle = fopen($archivo, "r");
-                $headers = fgetcsv($handle, 1000, ";");
+                $delimitador = ";";
+                $headers = fgetcsv($handle, 1000, $delimitador);
             }
 
-            // 2. BUSCADOR INTELIGENTE DE COLUMNAS (A prueba de balas)
+            // --- EL TRUCO MÁGICO: ELIMINAR EL CARÁCTER FANTASMA (BOM) ---
+            $headers[0] = str_replace(chr(0xEF).chr(0xBB).chr(0xBF), '', $headers[0]);
+            // -----------------------------------------------------------
+
+            // 2. BUSCADOR INTELIGENTE DE COLUMNAS
             $idx_nombre = false;
             $idx_codigo = false;
             $idx_sku = false;
-            $idx_precio = false;
-            $idx_costo = false;
 
             foreach ($headers as $index => $columna) {
-                // Pasamos a minúsculas y le quitamos los acentos para no tener problemas
                 $col = strtolower(trim($columna));
                 $col = str_replace(['á','é','í','ó','ú'], ['a','e','i','o','u'], $col);
 
-                // Buscamos coincidencias flexibles
-                if ($col === 'nombre' || $col === 'nombre del articulo' || $col === 'item name') {
+                if ($col === 'nombre' || $col === 'nombre del articulo' || $col === 'item name' || $col === 'descripcion') {
                     $idx_nombre = $index;
                 }
                 if ($col === 'codigo de barras' || $col === 'barcode') {
@@ -1519,51 +1597,38 @@ if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESS
                 if ($col === 'ref' || $col === 'sku') {
                     $idx_sku = $index;
                 }
-                if ($col === 'coste' || $col === 'costo' || $col === 'cost') {
-                    $idx_costo = $index;
-                }
-                // Como Loyverse le pega el nombre del local al precio (ej: "Precio [Mi Local]"), 
-                // buscamos cualquier columna que CONTENGA la palabra "precio" o "price"
-                if (strpos($col, 'precio') !== false || strpos($col, 'price') !== false) {
-                    $idx_precio = $index;
-                }
             }
 
             // 3. Verificamos si encontramos lo mínimo indispensable
             if ($idx_nombre === false || $idx_codigo === false) {
-                $error = "❌ El archivo no parece ser un CSV de Loyverse válido. Faltan las columnas 'Nombre del artículo' o 'Código de barras'.";
+                $error = "❌ El archivo no es válido. Faltan las columnas 'Nombre/Descripción' o 'Código de barras'.";
             } else {
                 $insertados = 0;
                 $duplicados = 0;
 
                 $check_stmt = $db->prepare("SELECT id FROM productos WHERE codigo_barras = ?");
-                $insert_stmt = $db->prepare("INSERT INTO productos (codigo_barras, sku, descripcion, precio_compra, precio_venta) VALUES (:cb, :sku, :desc, :pc, :pv)");
+                $insert_stmt = $db->prepare("INSERT INTO productos (codigo_barras, sku, descripcion) VALUES (:cb, :sku, :desc)");
 
-                // 4. Recorrer fila por fila e insertar
-                while (($datos = fgetcsv($handle, 1000, count($headers) > 1 ? "," : ";")) !== FALSE) {
-                    // Evitar filas vacías
+                // 4. Recorrer fila por fila
+                while (($datos = fgetcsv($handle, 1000, $delimitador)) !== FALSE) {
                     if (empty($datos) || count($datos) < 2) continue;
 
                     $codigo = trim($datos[$idx_codigo]);
                     $descripcion = trim(strtoupper($datos[$idx_nombre]));
 
-                    // Si no tiene código de barras, lo saltamos (MACARO necesita códigos para escanear)
                     if (empty($codigo)) continue;
 
-                    // Verificamos si ya existe en la base de datos
                     $check_stmt->execute([$codigo]);
                     if (!$check_stmt->fetch()) {
                         
-                        $sku = ($idx_sku !== false && isset($datos[$idx_sku])) ? trim($datos[$idx_sku]) : $codigo;
-                        $precio_venta = ($idx_precio !== false && isset($datos[$idx_precio])) ? floatval($datos[$idx_precio]) : null;
-                        $precio_compra = ($idx_costo !== false && isset($datos[$idx_costo])) ? floatval($datos[$idx_costo]) : null;
+                        // Protección contra valores vacíos para que la base de datos no tire error
+                        $sku = ($idx_sku !== false && isset($datos[$idx_sku]) && $datos[$idx_sku] !== '') ? trim($datos[$idx_sku]) : $codigo;
+                       
 
                         $insert_stmt->execute([
                             'cb' => $codigo,
                             'sku' => $sku,
                             'desc' => $descripcion,
-                            'pc' => $precio_compra,
-                            'pv' => $precio_venta
                         ]);
                         $insertados++;
                     } else {
@@ -1584,7 +1649,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESS
 // ==========================================
 // MÓDULO: CALENDARIO DE AUDITORÍAS (CON SINCRONIZACIÓN)
 // ==========================================
-
 // --- ACCIÓN A: CARGAR EL CALENDARIO ---
 if (isset($_GET['action']) && $_GET['action'] === 'calendario') {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
@@ -1647,6 +1711,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'calendario') {
     // Título dinámico para la vista
     $titulo_periodo = "Próximos 30 días y Pendientes (al " . $finPeriodo->format('d/m/Y') . ")";
 
+    // Atrapamos el error si intentan agendar doble para pasarlo a la vista
+    $error = isset($_GET['error']) ? $_GET['error'] : '';
+
     require_once __DIR__ . '/../src/Application/Views/calendario.php';
     exit;
 }
@@ -1656,6 +1723,16 @@ if (isset($_GET['action']) && $_GET['action'] === 'guardar_auditoria') {
     $db = (new Database())->getConnection();
     $local_id = intval($_POST['local_id']);
     
+    // BARRERA DE SEGURIDAD: Comprobamos si el local ya tiene una auditoría "Pendiente"
+    $check_stmt = $db->prepare("SELECT id FROM auditorias_programadas WHERE local_id = ? AND estado = 'Pendiente'");
+    $check_stmt->execute([$local_id]);
+    
+    if ($check_stmt->fetch()) {
+        // Si ya tiene una pendiente, cancelamos todo y redirigimos con un error
+        header("Location: index.php?action=calendario&error=auditoria_duplicada");
+        exit;
+    }
+
     $stmt = $db->prepare("INSERT INTO auditorias_programadas (local_id, encargado_id, fecha_auditoria, hora_auditoria, estado) VALUES (?, ?, ?, ?, 'Pendiente')");
     $stmt->execute([$local_id, intval($_POST['encargado_id']), $_POST['fecha'], $_POST['hora']]);
     

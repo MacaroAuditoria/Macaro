@@ -58,26 +58,6 @@
             </select>
         </div>
 
-        <div>
-            <label style="font-weight: bold; font-size: 14px; color: #555;">Precio de Compra ($)</label>
-            <input type="number" step="0.01" name="precio_compra" placeholder="0.00" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-        </div>
-        
-        <div>
-            <label style="font-weight: bold; font-size: 14px; color: #555;">Precio de Venta ($)</label>
-            <input type="number" step="0.01" name="precio_venta" placeholder="0.00" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-        </div>
-
-        <div style="grid-column: span 2;">
-            <label style="font-weight: bold; font-size: 14px; color: #555;">Distribuidor</label>
-            <select name="distribuidor_id" style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box;">
-                <option value="">Sin asignar...</option>
-                <?php foreach ($listaDistribuidores as $d): ?>
-                    <option value="<?php echo $d['id']; ?>"><?php echo htmlspecialchars($d['nombre']); ?></option>
-                <?php endforeach; ?>
-            </select>
-        </div>
-
         <div style="grid-column: span 2; text-align: right; margin-top: 10px;">
             <button type="submit" class="btn-primario" style="width: 200px;">💾 Guardar Producto</button>
         </div>
@@ -94,7 +74,6 @@
                     <th style="padding: 10px;">Descripción</th>
                     <th style="padding: 10px;">Marca</th>
                     <th style="padding: 10px;">Categoría</th>
-                    <th style="padding: 10px;">Precio V.</th>
                 </tr>
             </thead>
             <tbody>
@@ -107,9 +86,6 @@
                             <td style="padding: 10px;"><?php echo htmlspecialchars($prod['descripcion']); ?></td>
                             <td style="padding: 10px; color: #777;"><?php echo htmlspecialchars($prod['marca'] ?? '-'); ?></td>
                             <td style="padding: 10px; color: #777;"><?php echo htmlspecialchars($prod['categoria_nombre'] ?? 'Sin asignar'); ?></td>
-                            <td style="padding: 10px; color: green; font-weight: bold;">
-                                <?php echo $prod['precio_venta'] ? '$' . number_format($prod['precio_venta'], 2) : '-'; ?>
-                            </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

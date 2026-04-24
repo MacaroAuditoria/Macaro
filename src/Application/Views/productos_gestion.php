@@ -17,7 +17,11 @@
 
 <div class="header">
     <div class="user-info">🔎 Gestión de Catálogo</div>
-    <div><a href="index.php?action=productos" class="btn-primario" style="background: #6c757d; text-decoration:none;">Volver</a></div>
+    <div>
+        <a href="index.php?action=productos_exportar_csv" class="btn-primario" style="background: #28a745; text-decoration:none; margin-right: 10px;">📥 Descargar CSV</a>
+        
+        <a href="index.php?action=productos" class="btn-primario" style="background: #6c757d; text-decoration:none;">Volver</a>
+    </div>
 </div>
 
 <div style="background: white; padding: 30px; border-radius: 10px; max-width: 1300px; margin: 30px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
@@ -54,8 +58,6 @@
                     <th>Descripción</th>
                     <th>Marca</th>
                     <th>Categoría</th>
-                    <th>Distribuidor</th>
-                    <th>P. Venta</th>
                     <th style="text-align: center;">Acciones</th>
                 </tr>
             </thead>
@@ -71,8 +73,6 @@
                     <td><strong><?php echo htmlspecialchars($p['descripcion']); ?></strong></td>
                     <td><?php echo htmlspecialchars($p['marca'] ?? '-'); ?></td>
                     <td><?php echo htmlspecialchars($p['categoria_nombre'] ?? '-'); ?></td>
-                    <td><?php echo htmlspecialchars($p['distribuidor_nombre'] ?? '-'); ?></td>
-                    <td><?php echo !empty($p['precio_venta']) ? '$' . number_format($p['precio_venta'], 2) : '-'; ?></td>
                     
                     <td style="text-align: center;">
                         <a href="index.php?action=productos_eliminar&id=<?php echo $p['id']; ?>" 

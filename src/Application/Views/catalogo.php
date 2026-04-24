@@ -20,11 +20,6 @@
         <h3 class="menu-title">Categorías</h3>
     </a>
 
-    <a href="?action=distribuidores" class="menu-card">
-        <span class="menu-icon">🚚</span>
-        <h3 class="menu-title">Distribuidores</h3>
-    </a>
-
     <a href="?action=productos" class="menu-card">
         <span class="menu-icon">📦</span>
         <h3 class="menu-title">Productos</h3>

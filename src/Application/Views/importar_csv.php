@@ -29,7 +29,7 @@
 <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: 40px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
     
     <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #2196f3; padding-bottom: 10px;">Importación desde Loyverse</h2>
-    <p style="color: #666; margin-bottom: 25px;">Seleccione el archivo CSV exportado desde el sistema del cliente. MACARO extraerá automáticamente los Códigos de Barra, Descripciones y Precios para alimentar el catálogo.</p>
+    <p style="color: #666; margin-bottom: 25px;">Seleccione el archivo CSV exportado desde el sistema del cliente. MACARO extraerá automáticamente los Códigos de Barra, Descripciones para alimentar el catálogo.</p>
 
     <?php if (isset($error)) echo "<div style='background:#ffebee; color:#c62828; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;'>$error</div>"; ?>
     <?php if (isset($exito)) echo "<div style='background:#e8f5e9; color:#2e7d32; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;'>$exito</div>"; ?>

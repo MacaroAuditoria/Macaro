@@ -90,26 +90,6 @@
                     <?php endforeach; ?>
                 </select>
             </div>
-
-            <div class="form-group">
-                <label>Distribuidor / Proveedor</label>
-                <select name="distribuidor_id">
-                    <option value="">-- Sin distribuidor --</option>
-                    <?php foreach ($listaDistribuidores as $dist): ?>
-                        <option value="<?php echo $dist['id']; ?>"><?php echo htmlspecialchars($dist['nombre']); ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Precio de Compra ($)</label>
-                <input type="number" step="0.01" name="precio_compra" placeholder="0.00">
-            </div>
-
-            <div class="form-group">
-                <label>Precio de Venta ($)</label>
-                <input type="number" step="0.01" name="precio_venta" placeholder="0.00">
-            </div>
         </div>
 
         <div style="margin-top: 30px; text-align: right; border-top: 1px solid #eee; padding-top: 20px;">
