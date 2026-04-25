@@ -73,8 +73,15 @@
         }
 
         .logo-macaro { font-size: 11px; font-weight: 900; }
-        .header-label { font-size: 8px; font-weight: bold; }
-
+        .header-label {
+            font-size: 9px; /* Lo subimos un poquito para que se lea mejor */
+            font-weight: bold;
+            text-transform: uppercase; /* Para que siempre quede prolijo en mayúsculas */
+            max-width: 120px; /* Le damos un límite para que no empuje al logo */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis; /* Si el nombre es larguísimo, pone tres puntitos (...) */
+        }
         .centro-tarjeta {
             text-align: center;
             flex-grow: 1;
@@ -100,16 +107,16 @@
         }
 
         .contenedor-cantidad {
-            margin-top: 5px;
-            border: 2px solid #000;
-            padding: 4px;
+            margin-top: 20px;
+            /* border: 1px solid #000; */
+            padding: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 16px;
         }
 
-        .label-cantidad { font-size: 12px; font-weight: bold; }
+        .label-cantidad { font-size: 17px; font-weight: bold; }
         .espacio-cantidad { width: 45px; border-bottom: 1.5px solid #000; height: 18px; }
 
         /* Reglas de impresión */
@@ -139,12 +146,12 @@
         <div class="tarjeta-zona">
             <div class="header-tarjeta">
                 <div class="logo-macaro">MACARO</div>
-                <div class="header-label">AUDITORÍA</div>
+                <div class="header-label"><?php echo htmlspecialchars($sector_nombre); ?></div>
             </div>
             
             <div class="centro-tarjeta">
-                <p class="codigo-barras">*<?php echo htmlspecialchars($zona); ?>*</p>
-                <p class="zona-texto"><?php echo htmlspecialchars($zona); ?></p>
+                <p class="codigo-barras">*Z-<?php echo $zona['id']; ?>*</p>
+                <p class="zona-texto"><?php echo htmlspecialchars($zona['codigo']); ?></p>
                 
                 <div class="contenedor-cantidad">
                     <span class="label-cantidad">CANT:</span>

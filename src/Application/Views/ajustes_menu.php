@@ -47,6 +47,17 @@
 </div>
 
 <div class="menu-grid">
+    
+    <a href="index.php?action=ajustes_sectores" class="menu-card" style="border: 1px solid #00897b;">
+        <span class="menu-icon">🏷️</span>
+        <h3 class="menu-title">Sectores</h3>
+    </a>
+    
+    <a href="index.php?action=calendario" class="menu-card" style="border-top: 4px solid #673ab7; border-left: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee;">
+        <span class="menu-icon">📅</span>
+        <h3 class="menu-title">Calendario</h3>
+    </a>
+    
     <?php if ($_SESSION['rol_id'] == 1): ?>
     <a href="index.php?action=ajustes_locales" class="menu-card" style="border: 1px solid #00897b;">
         <span class="menu-icon">🏢</span>
@@ -60,15 +71,6 @@
     </a>
     <?php endif; ?>
 
-    <a href="index.php?action=ajustes_sectores" class="menu-card" style="border: 1px solid #00897b;">
-        <span class="menu-icon">🏷️</span>
-        <h3 class="menu-title">Sectores</h3>
-    </a>
-    
-    <a href="index.php?action=calendario" class="menu-card" style="border-top: 4px solid #673ab7; border-left: 1px solid #eee; border-right: 1px solid #eee; border-bottom: 1px solid #eee;">
-        <span class="menu-icon">📅</span>
-        <h3 class="menu-title">Calendario</h3>
-    </a>
 </div>
 
 </body>

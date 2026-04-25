@@ -199,22 +199,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_zonas') {
     $datos_tabla = [];
     
     if ($local_id && $sector_id) {
+        // CORRECCIÓN: Ahora confiamos 100% en el ID único de la zona (z.id)
         $sql = "SELECT z.id AS zona_id, z.codigo AS zona_nombre,
-                    (SELECT id FROM zonas_cerradas WHERE zona_id = z.id AND local_id = :loc1 AND sector_id = :sec1 AND estado = 'cerrada' LIMIT 1) AS bloqueada,
-                    (SELECT u.nombre_completo FROM zonas_cerradas zc JOIN usuarios u ON zc.usuario_id = u.id WHERE zc.zona_id = z.id AND zc.local_id = :loc2 AND zc.sector_id = :sec2 AND zc.estado = 'cerrada' LIMIT 1) AS cerrado_por,
-                    (SELECT u.nombre_completo FROM zonas_cerradas zc JOIN usuarios u ON zc.usuario_id = u.id WHERE zc.zona_id = z.id AND zc.local_id = :loc3 AND zc.sector_id = :sec3 AND zc.estado = 'en_uso' LIMIT 1) AS en_uso_por,
-                    (SELECT SUM(cantidad) FROM conteos c WHERE c.zona_id = z.id AND c.local_id = :loc4 AND c.sector_id = :sec4) AS total_unidades
+                    (SELECT id FROM zonas_cerradas WHERE zona_id = z.id AND estado = 'cerrada' LIMIT 1) AS bloqueada,
+                    (SELECT u.nombre_completo FROM zonas_cerradas zc JOIN usuarios u ON zc.usuario_id = u.id WHERE zc.zona_id = z.id AND zc.estado = 'cerrada' LIMIT 1) AS cerrado_por,
+                    (SELECT u.nombre_completo FROM zonas_cerradas zc JOIN usuarios u ON zc.usuario_id = u.id WHERE zc.zona_id = z.id AND zc.estado = 'en_uso' LIMIT 1) AS en_uso_por,
+                    (SELECT SUM(cantidad) FROM conteos c WHERE c.zona_id = z.id) AS total_unidades
                 FROM zonas z
-                WHERE (z.local_id = :loc5 AND z.sector_id = :sec5) OR z.local_id IS NULL
+                WHERE z.local_id = :loc_id AND z.sector_id = :sec_id
                 ORDER BY z.codigo ASC";
         
         $stmt = $db->prepare($sql);
         $stmt->execute([
-            'loc1' => $local_id, 'sec1' => $sector_id, 
-            'loc2' => $local_id, 'sec2' => $sector_id, 
-            'loc3' => $local_id, 'sec3' => $sector_id, 
-            'loc4' => $local_id, 'sec4' => $sector_id,
-            'loc5' => $local_id, 'sec5' => $sector_id // Filtro nuevo para que no se mezclen locales
+            'loc_id' => $local_id, 
+            'sec_id' => $sector_id
         ]);
         $datos_tabla = $stmt->fetchAll();
     }
@@ -302,45 +300,66 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_vaciar_zona' && isset
     exit;
 }
 // ==========================================
+// ==========================================
 // MÓDULO: ELIMINAR ZONA (BORRADO COMPLETO)
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'monitor_eliminar_zona' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); } // Solo admins o encargados
     $db = (new Database())->getConnection();
     
-    $zona_id = $_GET['zona_id'];
-    $local_id = $_GET['local_id'];
-    $sector_id = $_GET['sector_id'];
+    $zona_id = intval($_GET['zona_id']);
+    $local_id = intval($_GET['local_id']);
+    $sector_id = intval($_GET['sector_id']);
 
-    // 1. Por seguridad en la base de datos, primero borramos todos los conteos de esa zona
-    $stmt_conteos = $db->prepare("DELETE FROM conteo_productos WHERE zona_id = ?");
-    $stmt_conteos->execute([$zona_id]);
+    try {
+        // Intentamos borrar la zona directamente.
+        // Si tiene productos en la tabla 'conteos', MySQL nos va a frenar por seguridad.
+        $stmt_zona = $db->prepare("DELETE FROM zonas WHERE id = ?");
+        $stmt_zona->execute([$zona_id]);
 
-    // 2. Ahora sí, borramos la zona definitivamente de la lista
-    $stmt_zona = $db->prepare("DELETE FROM zonas WHERE id = ?");
-    $stmt_zona->execute([$zona_id]);
+        // Si se borró bien porque estaba vacía, volvemos al monitor
+        header("Location: index.php?action=monitor_zonas&local_id=" . $local_id . "&sector_id=" . $sector_id);
+        exit;
 
-    // Redirigimos de vuelta al monitor en el mismo sector
-    header("Location: index.php?action=monitor_zonas&local_id=" . $local_id . "&sector_id=" . $sector_id);
-    exit;
+    } catch (PDOException $e) {
+        // Atrapamos el error de MySQL y mostramos el cartel rojo, frenando el sistema (die)
+        die("
+        <div style='background: #f4f4f9; height: 100vh; display: flex; align-items: center; justify-content: center; font-family: sans-serif; margin: 0;'>
+            <div style='background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-top: 5px solid #d32f2f; max-width: 500px; text-align: center;'>
+                <div style='font-size: 50px; margin-bottom: 20px;'>⚠️</div>
+                <h2 style='color: #d32f2f; margin-bottom: 15px; margin-top: 0;'>Zona con Datos</h2>
+                <p style='color: #555; line-height: 1.6; font-size: 16px;'>
+                    No se puede eliminar la zona porque <strong>contiene productos registrados</strong>. 
+                </p>
+                <div style='background: #fff8e1; border: 1px solid #ffe082; padding: 15px; border-radius: 8px; margin: 20px 0; text-align: left; font-size: 14px; color: #333;'>
+                    <strong>💡 ¿Qué hacer?</strong><br>
+                    Primero usá el botón <span style='color:#d32f2f; font-weight:bold;'>'Vaciar Zona'</span>. Una vez que esté en 0.00, vas a poder eliminarla.
+                </div>
+                <a href='index.php?action=monitor_zonas&local_id=$local_id&sector_id=$sector_id' 
+                   style='display: inline-block; background: #2196f3; color: white; padding: 12px 30px; border-radius: 6px; text-decoration: none; font-weight: bold;'>
+                   Volver al Monitor
+                </a>
+            </div>
+        </div>
+        ");
+    }
 }
 // ==========================================
 // MÓDULO: IMPRIMIR ETIQUETAS DE ZONAS
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'imprimir_zonas' && isset($_SESSION['usuario_id'])) {
     $db = (new Database())->getConnection();
-    //die("¡LLEGUÉ AL INDEX PERFECTAMENTE!");    
-    // Agarramos el local y sector que el usuario estaba mirando
-    $local_id = $_GET['local_id'] ?? 0;
-    $sector_id = $_GET['sector_id'] ?? 0;
+        
+    $local_id = $_GET['local_id'];
+    $sector_id = $_GET['sector_id'];
 
-    // Buscamos todas las zonas reales de ese sector ordenadas alfabéticamente
-    $stmt = $db->prepare("SELECT codigo FROM zonas WHERE local_id = ? AND sector_id = ? ORDER BY codigo ASC");
+    // --- NUEVA LÍNEA: Traemos el nombre del sector ---
+    $sector_nombre = $db->query("SELECT nombre FROM sectores WHERE id = " . intval($sector_id))->fetchColumn();
+
+    $stmt = $db->prepare("SELECT id, codigo FROM zonas WHERE local_id = ? AND sector_id = ? ORDER BY codigo ASC");
     $stmt->execute([$local_id, $sector_id]);
+    $lista_zonas = $stmt->fetchAll(PDO::FETCH_ASSOC);
     
-    // Guardamos solo los códigos (ej: A0001, A0002) en un arreglo simple
-    $lista_zonas = $stmt->fetchAll(PDO::FETCH_COLUMN);
-
     // Si no hay zonas, le avisamos
     if (empty($lista_zonas)) {
         die("❌ No hay zonas creadas en este sector para imprimir. Volvé atrás y creá algunas primero.");
@@ -508,44 +527,52 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
         $codigo = trim(strtoupper($_POST['codigo_barras'])); // Lo pasamos a mayúsculas por si acaso
         $cantidad = !empty($_POST['cantidad']) ? $_POST['cantidad'] : 1;
 
-        // 1. ¿ES UN CÓDIGO DE ZONA? (SALTO MÁGICO CON CONFIRMACIÓN)
-        $check_zona = $db->prepare("SELECT id, codigo FROM zonas WHERE codigo = ? AND (local_id = ? OR local_id IS NULL) AND (sector_id <=> ? OR sector_id IS NULL) LIMIT 1");
-        $check_zona->execute([$codigo, $_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id']]);
-        $zona_escaneada = $check_zona->fetch();
-
-        if ($zona_escaneada) {
-            $nueva_zona_id = $zona_escaneada['id'];
+        // 1. ¿ES UN CÓDIGO DE ZONA ÚNICO? (Detecta si el código empieza con Z-)
+        if (substr($codigo, 0, 2) === 'Z-') {
             
-            if ($nueva_zona_id == $_SESSION['piqueo']['zona_id']) {
-                $mensaje_estado = "<div class='success-card'>Ya estás dentro de la Zona: {$zona_escaneada['codigo']}</div>";
-            } else {
-                // Verificamos si la NUEVA zona está disponible ANTES de preguntar
-                $check_estado = $db->prepare("SELECT estado, usuario_id FROM zonas_cerradas WHERE local_id = ? AND sector_id <=> ? AND zona_id = ?");
-                $check_estado->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $nueva_zona_id]);
-                $estado_nueva = $check_estado->fetch();
+            $zona_id_escaneada = (int) str_replace('Z-', '', $codigo);
+            
+            $check_zona = $db->prepare("SELECT id, codigo, local_id, sector_id FROM zonas WHERE id = ? LIMIT 1");
+            $check_zona->execute([$zona_id_escaneada]);
+            $zona_escaneada = $check_zona->fetch();
 
-                if ($estado_nueva && $estado_nueva['estado'] === 'cerrada') {
-                    $alerta_sonido = true;
-                    $mensaje_estado = "<div class='error-card'>❌ La zona {$zona_escaneada['codigo']} ya fue CERRADA.</div>";
-                } elseif ($estado_nueva && $estado_nueva['estado'] === 'en_uso' && $estado_nueva['usuario_id'] != $_SESSION['usuario_id']) {
-                    $alerta_sonido = true;
-                    $mensaje_estado = "<div class='error-card'>❌ La zona {$zona_escaneada['codigo']} está en uso por otro.</div>";
+            if ($zona_escaneada) {
+                $nueva_zona_id = $zona_escaneada['id'];
+                
+                if ($nueva_zona_id == $_SESSION['piqueo']['zona_id']) {
+                    $mensaje_estado = "<div class='success-card'>Ya estás dentro de la Zona: {$zona_escaneada['codigo']}</div>";
                 } else {
-                    // LA MAGIA DE LA CONFIRMACIÓN
-                    $alerta_sonido = true; 
-                    $mensaje_estado = "
-                    <div style='background: #ffb300; padding: 15px; border-radius: 5px; border-left: 5px solid #f57c00; margin-bottom: 20px; color: #000;'>
-                        <div style='font-size: 18px; font-weight: bold; margin-bottom: 10px;'>⚠️ ¿Cambiar de Zona?</div>
-                        <p style='margin: 0 0 15px 0; font-size: 15px;'>Escaneaste la zona <strong>{$zona_escaneada['codigo']}</strong>. ¿Querés terminar la actual y saltar a esta?</p>
-                        <div style='display: flex; gap: 10px;'>
-                            <a href='index.php?action=piqueo_escaner' style='flex: 1; padding: 15px; text-align: center; background: #fff; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; border: 1px solid #ccc;'>Cancelar</a>
-                            <a href='index.php?action=piqueo_ejecutar_salto&zona_id={$nueva_zona_id}' style='flex: 1; padding: 15px; text-align: center; background: #d32f2f; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;'>SÍ, SALTAR</a>
-                        </div>
-                    </div>";
+                    $check_estado = $db->prepare("SELECT estado, usuario_id FROM zonas_cerradas WHERE zona_id = ?");
+                    $check_estado->execute([$nueva_zona_id]);
+                    $estado_nueva = $check_estado->fetch();
+
+                    if ($estado_nueva && $estado_nueva['estado'] === 'cerrada') {
+                        $alerta_sonido = true;
+                        $mensaje_estado = "<div class='error-card'>❌ La zona {$zona_escaneada['codigo']} ya fue CERRADA.</div>";
+                    } elseif ($estado_nueva && $estado_nueva['estado'] === 'en_uso' && $estado_nueva['usuario_id'] != $_SESSION['usuario_id']) {
+                        $alerta_sonido = true;
+                        $mensaje_estado = "<div class='error-card'>❌ La zona {$zona_escaneada['codigo']} está en uso por otro.</div>";
+                    } else {
+                        // LA MAGIA: MOSTRAR CARTEL DE CONFIRMACIÓN PARA CERRAR Y SALTAR
+                        $alerta_sonido = true; 
+                        $mensaje_estado = "
+                        <div style='background: #ffb300; padding: 15px; border-radius: 5px; border-left: 5px solid #f57c00; margin-bottom: 20px; color: #000;'>
+                            <div style='font-size: 18px; font-weight: bold; margin-bottom: 10px;'>⚠️ ¿Cambiar a la Zona {$zona_escaneada['codigo']}?</div>
+                            <p style='margin: 0 0 15px 0; font-size: 15px;'>Al aceptar, tu zona actual pasará a estado <strong>CERRADA</strong> y empezarás a piquear en la nueva.</p>
+                            <div style='display: flex; gap: 10px;'>
+                                <a href='index.php?action=piqueo_escaner' style='flex: 1; padding: 15px; text-align: center; background: #fff; color: #000; text-decoration: none; border-radius: 5px; font-weight: bold; border: 1px solid #ccc;'>Cancelar</a>
+                                <a href='index.php?action=piqueo_ejecutar_salto&nueva_zona_id={$nueva_zona_id}&nuevo_local={$zona_escaneada['local_id']}&nuevo_sector={$zona_escaneada['sector_id']}' style='flex: 1; padding: 15px; text-align: center; background: #d32f2f; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;'>SÍ, SALTAR</a>
+                            </div>
+                        </div>";
+                    }
                 }
+            } else {
+                $alerta_sonido = true;
+                $mensaje_estado = "<div class='error-card'>❌ ZONA INVÁLIDA O ELIMINADA.</div>";
             }
+            
         } else {
-            // 2. NO ES ZONA, ES UN PRODUCTO NORMAL
+            // 2. NO ES ZONA, ES UN PRODUCTO NORMAL...
             
             // PRIMERO: Verificamos si el producto existe en el catálogo
             $check_prod = $db->prepare("SELECT descripcion FROM productos WHERE codigo_barras = ?");
@@ -775,31 +802,48 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_borrar_conteo' && isse
     exit;
 }
 
+// ==========================================
 // 7. NUEVA RUTA: EJECUTAR EL SALTO DE ZONA CONFIRMADO
+// ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'piqueo_ejecutar_salto' && isset($_SESSION['usuario_id'])) {
-    if (isset($_GET['zona_id']) && isset($_SESSION['piqueo'])) {
+    if (isset($_GET['nueva_zona_id']) && isset($_SESSION['piqueo'])) {
         $db = (new Database())->getConnection();
-        $nueva_zona_id = intval($_GET['zona_id']);
+        
+        $zona_vieja_id = $_SESSION['piqueo']['zona_id'];
+        $nueva_zona_id = intval($_GET['nueva_zona_id']);
+        $nuevo_local_id = intval($_GET['nuevo_local']);
+        $nuevo_sector_id = intval($_GET['nuevo_sector']);
 
-        // Buscamos el nombre de la nueva zona para darle la bienvenida
+        // Buscamos el nombre de la nueva zona para el mensaje de éxito
         $codigo_nueva_zona = $db->query("SELECT codigo FROM zonas WHERE id = " . $nueva_zona_id)->fetchColumn();
 
         if ($codigo_nueva_zona) {
-            // A) Cerramos y bloqueamos la zona vieja
-            $stmt_close = $db->prepare("UPDATE zonas_cerradas SET estado = 'cerrada' WHERE local_id = ? AND sector_id <=> ? AND zona_id = ? AND usuario_id = ?");
-            $stmt_close->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $_SESSION['piqueo']['zona_id'], $_SESSION['usuario_id']]);
+            // A) CERRAMOS LA ZONA VIEJA (Donde estaba el piqueador antes)
+            // Usamos solo el ID de la zona porque ahora es ÚNICO.
+            $stmt_close = $db->prepare("UPDATE zonas_cerradas SET estado = 'cerrada' WHERE zona_id = ?");
+            $stmt_close->execute([$zona_vieja_id]);
             
-            // B) Revisamos si la nueva tiene candado. Si no, se lo ponemos.
-            $check_estado = $db->prepare("SELECT id FROM zonas_cerradas WHERE local_id = ? AND sector_id <=> ? AND zona_id = ?");
-            $check_estado->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $nueva_zona_id]);
+            // B) ABRIMOS LA ZONA NUEVA (La ponemos en uso por este usuario)
+            $check_estado = $db->prepare("SELECT id FROM zonas_cerradas WHERE zona_id = ?");
+            $check_estado->execute([$nueva_zona_id]);
             
-            if (!$check_estado->fetch()) {
+            if ($check_estado->fetch()) {
+                // Si ya existe el registro, lo actualizamos a 'en_uso'
+                $stmt_update = $db->prepare("UPDATE zonas_cerradas SET estado = 'en_uso', usuario_id = ?, local_id = ?, sector_id = ? WHERE zona_id = ?");
+                $stmt_update->execute([$_SESSION['usuario_id'], $nuevo_local_id, $nuevo_sector_id, $nueva_zona_id]);
+            } else {
+                // Si es la primera vez que se toca, la insertamos
                 $stmt_uso = $db->prepare("INSERT INTO zonas_cerradas (local_id, sector_id, zona_id, usuario_id, estado) VALUES (?, ?, ?, ?, 'en_uso')");
-                $stmt_uso->execute([$_SESSION['piqueo']['local_id'], $_SESSION['piqueo']['sector_id'], $nueva_zona_id, $_SESSION['usuario_id']]);
+                $stmt_uso->execute([$nuevo_local_id, $nuevo_sector_id, $nueva_zona_id, $_SESSION['usuario_id']]);
             }
             
-            // C) Actualizamos la memoria del sistema (viaje en el tiempo)
+            // C) ACTUALIZAMOS LA BRÚJULA (SESIÓN)
+            // Esto es vital para que no se mezclen los datos si saltó de un sector a otro
+            $_SESSION['piqueo']['local_id'] = $nuevo_local_id;
+            $_SESSION['piqueo']['sector_id'] = $nuevo_sector_id;
             $_SESSION['piqueo']['zona_id'] = $nueva_zona_id;
+
+            // Resetamos el start_id para el monitor de la pantalla
             $max_id = $db->query("SELECT MAX(id) FROM conteos")->fetchColumn();
             $_SESSION['piqueo']['start_id'] = $max_id ? $max_id : 0;
             
