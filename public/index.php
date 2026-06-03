@@ -1124,13 +1124,17 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
     } elseif ($tipo_reporte === 'datos') {
         // ========================================================
         // OPCIÓN 3: DATOS CRUDOS (Para importación)
-        // Pedido: Código de Barras, SKU, Cantidad, Categoría, Marca
+        // Pedido: Código de Barras, SKU, Nombre, Cantidad, Categoría, Marca
         // ========================================================
-        fputcsv($output, ['Código de Barras', 'SKU', 'Cantidad', 'Categoría', 'Marca'], ';');
         
+        // 1. Agregamos 'Nombre' al encabezado
+        fputcsv($output, ['Código de Barras', 'SKU', 'Nombre', 'Cantidad', 'Categoría', 'Marca'], ';');
+        
+        // 2. Agregamos p.descripcion al SELECT y al GROUP BY
         $sql = "SELECT 
                     c.codigo_barras, 
                     p.sku, 
+                    p.descripcion, 
                     SUM(c.cantidad) as cantidad_total,  
                     cat.nombre as categoria_nombre, 
                     p.marca 
@@ -1138,7 +1142,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
                 LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
                 WHERE c.local_id = ? 
-                GROUP BY c.codigo_barras, p.sku, cat.nombre, p.marca";
+                GROUP BY c.codigo_barras, p.sku, p.descripcion, cat.nombre, p.marca";
                 
         $stmt = $db->prepare($sql);
         $stmt->execute([$local_id]);
@@ -1149,9 +1153,11 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
             $marca = !empty($row['marca']) ? $row['marca'] : '-';
             $categoria = !empty($row['categoria_nombre']) ? $row['categoria_nombre'] : 'Sin Categoría';
 
+            // 3. Incluimos el dato en la fila del CSV
             fputcsv($output, [
                 $codigo_excel, 
                 $sku, 
+                $row['descripcion'], // El nombre que faltaba
                 number_format($row['cantidad_total'], 2, '.', ''), 
                 $categoria, 
                 $marca
