@@ -1077,6 +1077,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'inventario_menu' && isset($_S
 if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     
+    // Limpiamos cualquier espacio en blanco en la memoria para que el Excel no se corrompa
+    if (ob_get_level()) { ob_end_clean(); }
+    
     $db = (new Database())->getConnection();
     $local_id = intval($_POST['local_id']);
     $tipo_reporte = $_POST['tipo_reporte'] ?? 'detallado';
@@ -1094,19 +1097,22 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
 
     if ($tipo_reporte === 'unificado') {
         // ========================================================
-        // OPCIÓN 2: UNIFICADO (Suma total del local, sin Zonas)
+        // OPCIÓN 2: UNIFICADO (Catálogo completo, suma total del local)
         // ========================================================
         fputcsv($output, ['Código de Barras', 'SKU', 'Nombre del Producto', 'Marca', 'Cantidad Total', 'Categoría'], ';');
         
         $sql = "SELECT 
-                    c.codigo_barras, p.sku, p.descripcion, p.marca,
-                    SUM(c.cantidad) as cantidad_total,
+                    p.codigo_barras, p.sku, p.descripcion, p.marca,
+                    COALESCE(c.total_contado, 0) as cantidad_total,
                     cat.nombre as categoria_nombre
-                FROM conteos c
-                LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
+                FROM productos p
+                LEFT JOIN (
+                    SELECT codigo_barras, SUM(cantidad) as total_contado 
+                    FROM conteos 
+                    WHERE local_id = ? 
+                    GROUP BY codigo_barras
+                ) c ON p.codigo_barras = c.codigo_barras
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
-                WHERE c.local_id = ?
-                GROUP BY c.codigo_barras, p.sku, p.descripcion, p.marca, cat.nombre
                 ORDER BY p.descripcion ASC";
                 
         $stmt = $db->prepare($sql);
@@ -1123,26 +1129,27 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
 
     } elseif ($tipo_reporte === 'datos') {
         // ========================================================
-        // OPCIÓN 3: DATOS CRUDOS (Para importación)
+        // OPCIÓN 3: DATOS CRUDOS (Para importación, Catálogo Completo)
         // Pedido: Código de Barras, SKU, Nombre, Cantidad, Categoría, Marca
         // ========================================================
-        
-        // 1. Agregamos 'Nombre' al encabezado
         fputcsv($output, ['Código de Barras', 'SKU', 'Nombre', 'Cantidad', 'Categoría', 'Marca'], ';');
         
-        // 2. Agregamos p.descripcion al SELECT y al GROUP BY
         $sql = "SELECT 
-                    c.codigo_barras, 
+                    p.codigo_barras, 
                     p.sku, 
                     p.descripcion, 
-                    SUM(c.cantidad) as cantidad_total,  
+                    COALESCE(c.total_contado, 0) as cantidad_total,  
                     cat.nombre as categoria_nombre, 
                     p.marca 
-                FROM conteos c
-                LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
+                FROM productos p
+                LEFT JOIN (
+                    SELECT codigo_barras, SUM(cantidad) as total_contado 
+                    FROM conteos 
+                    WHERE local_id = ? 
+                    GROUP BY codigo_barras
+                ) c ON p.codigo_barras = c.codigo_barras
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
-                WHERE c.local_id = ? 
-                GROUP BY c.codigo_barras, p.sku, p.descripcion, cat.nombre, p.marca";
+                ORDER BY p.descripcion ASC";
                 
         $stmt = $db->prepare($sql);
         $stmt->execute([$local_id]);
@@ -1153,11 +1160,10 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
             $marca = !empty($row['marca']) ? $row['marca'] : '-';
             $categoria = !empty($row['categoria_nombre']) ? $row['categoria_nombre'] : 'Sin Categoría';
 
-            // 3. Incluimos el dato en la fila del CSV
             fputcsv($output, [
                 $codigo_excel, 
                 $sku, 
-                $row['descripcion'], // El nombre que faltaba
+                $row['descripcion'], 
                 number_format($row['cantidad_total'], 2, '.', ''), 
                 $categoria, 
                 $marca
@@ -1166,7 +1172,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
 
     } else {
         // ========================================================
-        // OPCIÓN 1: DETALLADO (Separado por Zona y Sector)
+        // OPCIÓN 1: DETALLADO (Separado por Zona y Sector - Solo lo escaneado)
         // ========================================================
         fputcsv($output, ['Código de Barras', 'SKU', 'Nombre del Producto', 'Marca', 'Cantidad Total', 'Sector', 'Zona', 'Categoría'], ';');
         
