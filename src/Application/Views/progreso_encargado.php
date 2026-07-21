@@ -8,6 +8,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'menu_graficos'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📈 Análisis de Rendimiento</div>
     <a href="index.php?action=menu_graficos" class="logout-btn" style="background:#666;">Volver</a>
@@ -86,6 +90,9 @@
             Este encargado aún no tiene actas finalizadas para generar un gráfico.
         </div>
     <?php endif; ?>
+</div>
+
+</main>
 </div>
 
 </body>

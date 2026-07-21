@@ -109,6 +109,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'usuarios_gestion'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">👥 Gestión de Usuarios y Permisos</div>
     <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver al Inicio</a>
@@ -126,6 +130,7 @@
         <?php endif; ?>
 
         <form method="POST" action="index.php?action=usuarios_gestion">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <div class="form-group">
                 <label>Nombre y Apellido (Visible):</label>
                 <input type="text" name="nombre_completo" placeholder="Ej: Juan Pérez" required>
@@ -213,7 +218,7 @@
                     <td style="text-align: right;">
                         <a href="index.php?action=editar_usuario&id=<?php echo $u['id']; ?>" class="btn-edit">✏️ Editar</a>
                         <?php if($u['id'] != $_SESSION['usuario_id']): ?>
-                            <a href="index.php?action=eliminar_usuario&id=<?php echo $u['id']; ?>" class="btn-delete" onclick="return confirm('¿Eliminar definitivamente este usuario?')">🗑️ Borrar</a>
+                            <a href="index.php?action=eliminar_usuario&id=<?php echo $u['id']; ?>&csrf=<?php echo urlencode($_SESSION['csrf_token']); ?>" class="btn-delete" onclick="return confirm('¿Eliminar definitivamente este usuario?')">🗑️ Borrar</a>
                         <?php endif; ?>
                     </td>
                 </tr>
@@ -265,5 +270,8 @@ document.addEventListener('DOMContentLoaded', function() {
     selectRol.addEventListener('change', filtrarTabla);
 });
 </script>
+</main>
+</div>
+
 </body>
 </html>

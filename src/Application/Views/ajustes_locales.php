@@ -60,9 +60,16 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'ajustes_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
-    <div class="user-info">🏢 Gestión de Inventarios (Locales)</div>
-    <a href="index.php?action=ajustes_menu" class="logout-btn" style="background:#666;">Volver a Ajustes</a>
+    <div class="user-info">🏢 Gestión de Inventarios (Locales) — Cliente: <?php echo htmlspecialchars($_SESSION['cliente_nombre'] ?? '-'); ?></div>
+    <div>
+        <a href="index.php?action=clientes_gestion" class="logout-btn" style="background:#ff9800; margin-right:8px;">Cambiar Cliente</a>
+        <a href="index.php?action=ajustes_menu" class="logout-btn" style="background:#666;">Volver a Ajustes</a>
+    </div>
 </div>
 
 <div class="container-abm">
@@ -82,6 +89,7 @@
         <?php endif; ?>
 
         <form method="POST" action="index.php?action=ajustes_locales">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <div class="form-group">
                 <label>Nombre del Local:</label>
                 <input type="text" name="nombre" placeholder="Ej: Kiosco Centro" required>
@@ -143,7 +151,7 @@
                     </td>
                     <td style="text-align: right;">
                         <a href="index.php?action=editar_local&id=<?php echo $l['id']; ?>" class="btn-edit">✏️ Editar</a>
-                        <a href="index.php?action=eliminar_local&id=<?php echo $l['id']; ?>" class="btn-delete" onclick="return confirm('¿Eliminar este local?')">🗑️ Borrar</a>
+                        <a href="index.php?action=eliminar_local&id=<?php echo $l['id']; ?>&csrf=<?php echo urlencode($_SESSION['csrf_token']); ?>" class="btn-delete" onclick="return confirm('¿Eliminar este local?')">🗑️ Borrar</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -203,6 +211,9 @@ document.addEventListener('DOMContentLoaded', function() {
     selectEncargado.addEventListener('change', filtrarTabla);
 });
 </script>
+
+</main>
+</div>
 
 </body>
 </html>

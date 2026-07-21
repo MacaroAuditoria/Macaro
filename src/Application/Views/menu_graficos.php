@@ -25,6 +25,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'menu_graficos'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📊 Panel de Gráficos y Auditoría</div>
     <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver al Inicio</a>
@@ -40,6 +44,9 @@
         <span class="icon">🏆</span>
         <h3>Ranking Piqueadores</h3>
     </a>
+</div>
+
+</main>
 </div>
 
 </body>

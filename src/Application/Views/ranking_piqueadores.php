@@ -8,6 +8,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'menu_graficos'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">🏆 Ranking de Productividad</div>
     <a href="index.php?action=menu_graficos" class="logout-btn" style="background:#666;">Volver</a>
@@ -81,6 +85,9 @@
         }
     });
 </script>
+
+</main>
+</div>
 
 </body>
 </html>

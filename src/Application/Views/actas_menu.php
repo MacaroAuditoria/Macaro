@@ -17,6 +17,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'actas_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📝 Centro de Actas</div>
     <a href="index.php" class="logout-btn" style="background:#666;">Volver al Inicio</a>
@@ -67,6 +71,9 @@
             </div>
         </form>
     </div>
+</div>
+
+</main>
 </div>
 
 </body>

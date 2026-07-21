@@ -40,6 +40,7 @@
     </div>
 
     <form id="formEvaluacion" method="POST" action="">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         <div class="form-group">
             <label>Nombre y Apellido de quien firma: <span style="color:red">*</span></label>
             <input type="text" name="nombre_evaluador" id="nombre_evaluador" placeholder="Ej: María González (Gerenta)" required>

@@ -7,6 +7,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'catalogo'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📂 Módulo de Catálogo</div>
     <div>
@@ -29,6 +33,9 @@
         <span class="menu-icon">📦</span>
         <h3 class="menu-title">OTROS</h3>
     </a>
+</div>
+
+</main>
 </div>
 
 </body>

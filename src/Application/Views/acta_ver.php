@@ -12,6 +12,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'actas_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📄 Acta N° <?php echo $acta['id']; ?></div>
     <a href="index.php?action=actas_buscar" class="logout-btn" style="background:#666;">Volver al Buscador</a>
@@ -42,6 +46,9 @@
     <div style="border: 1px solid #ccc; padding: 10px; text-align: center; background: #fafafa;">
         <img src="<?php echo $acta['firma_base64']; ?>" style="max-width: 100%; height: auto; border: 1px dashed #999;">
     </div>
+</div>
+
+</main>
 </div>
 
 </body>

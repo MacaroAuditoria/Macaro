@@ -13,6 +13,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'inventario_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📥 Cierre y Exportación de Inventarios</div>
     <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver</a>
@@ -28,6 +32,7 @@
         </div>
     <?php else: ?>
         <form method="POST" action="index.php">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <input type="hidden" name="action" value="inventario_exportar">
             
             <label style="display:block; text-align:left; font-weight:bold; color:#333; margin-bottom:5px;">1. Seleccionar Local</label>
@@ -50,6 +55,9 @@
             </button>
         </form>
     <?php endif; ?>
+</div>
+
+</main>
 </div>
 
 </body>

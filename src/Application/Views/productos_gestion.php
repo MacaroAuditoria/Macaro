@@ -15,6 +15,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'catalogo'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">🔎 Gestión de Catálogo</div>
     <div>
@@ -75,7 +79,7 @@
                     <td><?php echo htmlspecialchars($p['categoria_nombre'] ?? '-'); ?></td>
                     
                     <td style="text-align: center;">
-                        <a href="index.php?action=productos_eliminar&id=<?php echo $p['id']; ?>" 
+                        <a href="index.php?action=productos_eliminar&id=<?php echo $p['id']; ?>&csrf=<?php echo urlencode($_SESSION['csrf_token']); ?>" 
                            class="btn-eliminar" 
                            onclick="return confirm('⚠️ ¿Estás seguro de que deseas eliminar este producto?\n\nEsta acción no se puede deshacer.');" 
                            title="Eliminar">🗑️</a>
@@ -110,6 +114,9 @@ document.addEventListener('DOMContentLoaded', function() {
     buscador.addEventListener('keyup', filtrar);
 });
 </script>
+
+</main>
+</div>
 
 </body>
 </html>

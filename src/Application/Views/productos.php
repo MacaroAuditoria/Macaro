@@ -27,6 +27,7 @@
     <?php endif; ?>
 
     <form method="POST" action="index.php?action=productos" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 30px;">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         
         <div>
             <label style="font-weight: bold; font-size: 14px;">Código de Barras *</label>

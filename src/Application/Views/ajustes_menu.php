@@ -41,6 +41,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'ajustes_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">⚙️ Panel de Ajustes del Sistema</div>
     <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver</a>
@@ -71,6 +75,9 @@
     </a>
     <?php endif; ?>
 
+</div>
+
+</main>
 </div>
 
 </body>

@@ -67,6 +67,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'calendario'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📅 Calendario de Auditorías</div>
     <a href="index.php?action=ajustes_menu" class="logout-btn" style="background:#666;">Volver a Ajustes</a>
@@ -159,6 +163,7 @@
     <div class="modal-box">
         <h3>Agendar Nueva Auditoría</h3>
         <form method="POST" action="index.php?action=guardar_auditoria">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <input type="hidden" name="fecha" id="fecha_seleccionada">
             <p style="margin-bottom: 15px; color: #666;"><strong>Día seleccionado:</strong> <span id="mostrar_fecha"></span></p>
 
@@ -199,6 +204,7 @@
     <div class="modal-box" style="border-top: 4px solid #ff9800;">
         <h3>✏️ Editar Auditoría</h3>
         <form method="POST" action="index.php?action=actualizar_auditoria">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <input type="hidden" name="auditoria_id" id="edit_id">
             
             <div class="form-group" style="margin-bottom: 15px;">
@@ -329,6 +335,9 @@
         document.getElementById('modalEditar').style.display = 'block';
     }
 </script>
+
+</main>
+</div>
 
 </body>
 </html>

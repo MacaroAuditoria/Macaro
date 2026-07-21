@@ -7,6 +7,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'catalogo'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📁 Gestión de Categorías</div>
     <div>
@@ -23,6 +27,7 @@
     <?php endif; ?>
 
     <form method="POST" action="index.php?action=categorias" style="display: flex; gap: 10px; margin-bottom: 30px;">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         <input type="text" name="nueva_categoria" placeholder="Ej: Bebidas sin alcohol" required style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px;">
         <button type="submit" class="btn-primario" style="width: auto;">Guardar Categoría</button>
     </form>
@@ -44,7 +49,7 @@
                     <div>
                         <span style="color: #ccc; margin-right: 15px; font-size: 14px;">ID: <?php echo $categoria['id']; ?></span>
                         <a href="?action=editar_categoria&id=<?php echo $categoria['id']; ?>" class="btn-primario" style="padding: 5px 10px; text-decoration: none; font-size: 14px; background-color: #ffc107; color: #000;">✏️</a>
-                        <a href="?action=eliminar_categoria&id=<?php echo $categoria['id']; ?>" class="btn-primario" style="padding: 5px 10px; text-decoration: none; font-size: 14px; background-color: var(--color-peligro); margin-left: 5px;" onclick="return confirm('¿Seguro que querés eliminar esta categoría?');">🗑️</a>
+                        <a href="?action=eliminar_categoria&id=<?php echo $categoria['id']; ?>&csrf=<?php echo urlencode($_SESSION['csrf_token']); ?>" class="btn-primario" style="padding: 5px 10px; text-decoration: none; font-size: 14px; background-color: var(--color-peligro); margin-left: 5px;" onclick="return confirm('¿Seguro que querés eliminar esta categoría?');">🗑️</a>
                     </div>
                 </li>
             <?php endforeach; ?>
@@ -91,5 +96,8 @@ document.addEventListener('DOMContentLoaded', function() {
     inputBusqueda.addEventListener('keyup', filtrarLista);
 });
 </script>
+</main>
+</div>
+
 </body>
 </html>

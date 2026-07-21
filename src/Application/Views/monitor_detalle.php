@@ -16,6 +16,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'monitor_zonas'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📍 Detalle de Zona: <?php echo htmlspecialchars($zona_nombre); ?></div>
     <a href="index.php?action=monitor_zonas&local_id=<?php echo $local_id; ?>&sector_id=<?php echo $sector_id; ?>" class="btn-primario" style="background:#666; text-decoration:none;">Volver al Monitor</a>
@@ -78,6 +82,9 @@
         });
     });
 </script>
+
+</main>
+</div>
 
 </body>
 </html>

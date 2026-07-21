@@ -34,6 +34,7 @@
     <?php if (!empty($error)) echo "<div style='background:#ff5252; color:white; padding:15px; border-radius:8px; margin-bottom:20px; font-weight:bold;'>$error</div>"; ?>
 
     <form method="POST" action="index.php?action=piqueo_config">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         
         <div class="form-group">
             <label class="form-label">Inventario (Local)</label>

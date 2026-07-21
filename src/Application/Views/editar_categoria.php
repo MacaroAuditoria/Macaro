@@ -7,6 +7,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'catalogo'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">✏️ Editar Categoría</div>
     <div>
@@ -21,6 +25,7 @@
     <?php endif; ?>
 
     <form method="POST" action="index.php?action=editar_categoria">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         <input type="hidden" name="id" value="<?php echo $catActual['id']; ?>">
         
         <div style="margin-bottom: 20px;">
@@ -31,6 +36,9 @@
         <button type="submit" class="btn-primario">Actualizar Categoría</button>
     </form>
 
+</div>
+
+</main>
 </div>
 
 </body>

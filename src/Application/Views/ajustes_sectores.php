@@ -109,6 +109,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'ajustes_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">🏷️ Gestión de Sectores</div>
     <a href="index.php?action=ajustes_menu" class="logout-btn" style="background:#666;">Volver a Ajustes</a>
@@ -131,6 +135,7 @@
             </script>
         <?php endif; ?>
         <form method="POST" action="index.php?action=ajustes_sectores">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <div class="form-group">
                 <label>Inventario (Local) al que pertenece:</label>
                 <select name="local_id" required>
@@ -176,7 +181,7 @@
                     <td><strong><?php echo htmlspecialchars($s['nombre']); ?></strong></td>
                     <td style="text-align: right;">
                         <a href="index.php?action=editar_sector&id=<?php echo $s['id']; ?>" class="btn-edit">✏️ Editar</a>
-                        <a href="index.php?action=eliminar_sector&id=<?php echo $s['id']; ?>" class="btn-delete" onclick="return confirm('¿Eliminar definitivamente este sector?')">🗑️ Borrar</a>
+                        <a href="index.php?action=eliminar_sector&id=<?php echo $s['id']; ?>&csrf=<?php echo urlencode($_SESSION['csrf_token']); ?>" class="btn-delete" onclick="return confirm('¿Eliminar definitivamente este sector?')">🗑️ Borrar</a>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -247,5 +252,8 @@ document.addEventListener('DOMContentLoaded', function() {
     selectLocal.addEventListener('change', filtrarTabla);
 });
 </script>
+</main>
+</div>
+
 </body>
 </html>

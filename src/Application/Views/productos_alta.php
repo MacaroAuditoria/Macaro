@@ -44,6 +44,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'catalogo'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📦 Alta de Producto</div>
     <div>
@@ -59,6 +63,7 @@
     <?php if (isset($exito)) echo "<div style='background:#e8f5e9; color:#2e7d32; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;'>$exito</div>"; ?>
     
     <form method="POST" action="index.php?action=productos_alta">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         
         <div class="form-grid">
             <div class="form-group full-width">
@@ -97,6 +102,9 @@
             <button type="submit" class="btn-primario" style="background: #2196f3; font-size: 16px; padding: 12px 24px;">💾 Crear Producto</button>
         </div>
     </form>
+</div>
+
+</main>
 </div>
 
 </body>

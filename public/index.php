@@ -1,15 +1,99 @@
 <?php
-// 1. Iniciamos el sistema de memoria temporal (Sesiones)
+// 0. Configuración de entorno (debug on/off) — ver config/app.php
+$appConfig = require __DIR__ . '/../config/app.php';
+if ($appConfig['debug']) {
+    ini_set('display_errors', 1);
+    error_reporting(E_ALL);
+} else {
+    ini_set('display_errors', 0);
+    error_reporting(0);
+}
+
+// 1. Sesión endurecida: cookie de sesión inaccesible desde JS (evita robo por XSS),
+//    y solo se envía por HTTPS cuando el sitio ya está en producción con SSL.
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path' => '/',
+    'httponly' => true,
+    'samesite' => 'Lax',
+    'secure' => !$appConfig['debug'], // en XAMPP (http) esto tiene que quedar en false
+]);
+
+// 2. Iniciamos el sistema de memoria temporal (Sesiones)
 session_start();
 
 require_once __DIR__ . '/../vendor/autoload.php';
 use App\Infrastructure\Database;
+use App\Infrastructure\Security;
+
+// 3.1 Nos aseguramos de tener siempre un token CSRF disponible en sesión,
+//     lo use la vista actual o no (por ejemplo, para los links de "Borrar").
+Security::tokenCSRF();
+
+// 3.2 Protección CSRF: cualquier acción que llegue por POST tiene que traer
+//    el token de la sesión, o se rechaza. Esto evita que un link/formulario
+//    armado en OTRO sitio pueda ejecutar acciones usando tu sesión logueada
+//    (incluido el propio formulario de login).
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    Security::validarCSRF();
+}
 
 // ------------------------------------------------
-// 2. Si el usuario pide cerrar sesión
+// 4. Si el usuario pide cerrar sesión
 if (isset($_GET['action']) && $_GET['action'] === 'logout') {
     session_destroy();
     header("Location: index.php");
+    exit;
+}
+
+// ==========================================
+// MÓDULO: CLIENTES (multi-cliente)
+// ==========================================
+if (isset($_GET['action']) && $_GET['action'] === 'clientes_gestion' && isset($_SESSION['usuario_id'])) {
+    if ($_SESSION['rol_id'] != 1) { die("Acceso denegado. Solo administradores."); }
+    $db = (new Database())->getConnection();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre'])) {
+        $nombre = trim($_POST['nombre']);
+        $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '-', $nombre), '-'));
+
+        $check = $db->prepare("SELECT id FROM clientes WHERE nombre = ?");
+        $check->execute([$nombre]);
+        if ($check->fetch()) {
+            header("Location: index.php?action=clientes_gestion&error=duplicado");
+            exit;
+        }
+
+        $stmt = $db->prepare("INSERT INTO clientes (nombre, slug, contacto, telefono, email) VALUES (?, ?, ?, ?, ?)");
+        $stmt->execute([
+            $nombre,
+            $slug . '-' . uniqid(),
+            trim($_POST['contacto'] ?? ''),
+            trim($_POST['telefono'] ?? ''),
+            trim($_POST['email'] ?? ''),
+        ]);
+        header("Location: index.php?action=clientes_gestion");
+        exit;
+    }
+
+    $listaClientes = $db->query("SELECT * FROM clientes ORDER BY nombre ASC")->fetchAll();
+    require_once __DIR__ . '/../src/Application/Views/clientes_gestion.php';
+    exit;
+}
+
+// Elegir cuál es el "cliente activo" de la sesión (filtra productos/locales)
+if (isset($_GET['action']) && $_GET['action'] === 'seleccionar_cliente' && isset($_SESSION['usuario_id']) && isset($_GET['id'])) {
+    $db = (new Database())->getConnection();
+    $stmt = $db->prepare("SELECT id, nombre FROM clientes WHERE id = ?");
+    $stmt->execute([intval($_GET['id'])]);
+    $cliente = $stmt->fetch();
+
+    if ($cliente) {
+        $_SESSION['cliente_id'] = $cliente['id'];
+        $_SESSION['cliente_nombre'] = $cliente['nombre'];
+    }
+    $volver = $_GET['volver'] ?? 'dashboard';
+    header("Location: index.php?action=" . $volver);
     exit;
 }
 
@@ -89,6 +173,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'editar_categoria' && isset($_
 
 // 3. ELIMINAR CATEGORÍA
 if (isset($_GET['action']) && $_GET['action'] === 'eliminar_categoria' && isset($_SESSION['usuario_id'])) {
+    Security::validarCSRF_GET();
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
 
@@ -268,9 +353,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_detalle_zona' && isse
     $stmt = $db->prepare("
         SELECT c.id, c.codigo_barras, c.cantidad, p.descripcion, u.nombre_completo as nombre_usuario
         FROM conteos c
-        LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
-        LEFT JOIN usuarios u ON c.usuario_id = u.id
-        WHERE c.local_id = ? AND c.sector_id <=> ? AND c.zona_id = ?
+        LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras AND p.cliente_id = (SELECT cliente_id FROM locales WHERE id = c.local_id)
         ORDER BY c.id DESC
     ");
     $stmt->execute([$local_id, $sector_id, $zona_id]);
@@ -304,6 +387,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'monitor_vaciar_zona' && isset
 // MÓDULO: ELIMINAR ZONA (BORRADO COMPLETO)
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'monitor_eliminar_zona' && isset($_SESSION['usuario_id'])) {
+    Security::validarCSRF_GET();
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); } // Solo admins o encargados
     $db = (new Database())->getConnection();
     
@@ -523,6 +607,11 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
     $alerta_sonido = false;
     $mensaje_estado = "";
 
+    // El catálogo a usar depende de a qué CLIENTE pertenece el local que se está piqueando
+    $stmt_cliente_local = $db->prepare("SELECT cliente_id FROM locales WHERE id = ?");
+    $stmt_cliente_local->execute([$_SESSION['piqueo']['local_id']]);
+    $cliente_id_activo = $stmt_cliente_local->fetchColumn();
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['codigo_barras'])) {
         $codigo = trim(strtoupper($_POST['codigo_barras'])); // Lo pasamos a mayúsculas por si acaso
         $cantidad = !empty($_POST['cantidad']) ? $_POST['cantidad'] : 1;
@@ -574,9 +663,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
         } else {
             // 2. NO ES ZONA, ES UN PRODUCTO NORMAL...
             
-            // PRIMERO: Verificamos si el producto existe en el catálogo
-            $check_prod = $db->prepare("SELECT descripcion FROM productos WHERE codigo_barras = ?");
-            $check_prod->execute([$codigo]);
+            // PRIMERO: Verificamos si el producto existe en el catálogo DE ESTE CLIENTE
+            $check_prod = $db->prepare("SELECT descripcion FROM productos WHERE codigo_barras = ? AND cliente_id = ?");
+            $check_prod->execute([$codigo, $cliente_id_activo]);
             $prod = $check_prod->fetch();
 
             if ($prod) {
@@ -659,9 +748,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
     
     if ($aud_activa) {
         $stmt_total = $db->prepare("SELECT SUM(c.cantidad) FROM conteos c 
-                                    INNER JOIN productos p ON c.codigo_barras = p.codigo_barras 
+                                    INNER JOIN productos p ON c.codigo_barras = p.codigo_barras AND p.cliente_id = ?
                                     WHERE c.auditoria_id = ? AND c.zona_id = ? AND c.local_id = ? AND c.sector_id <=> ?");
         $stmt_total->execute([
+            $cliente_id_activo,
             $aud_activa['id'],
             $_SESSION['piqueo']['zona_id'], 
             $_SESSION['piqueo']['local_id'], 
@@ -669,9 +759,10 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
         ]);
     } else {
         $stmt_total = $db->prepare("SELECT SUM(c.cantidad) FROM conteos c 
-                                    INNER JOIN productos p ON c.codigo_barras = p.codigo_barras 
+                                    INNER JOIN productos p ON c.codigo_barras = p.codigo_barras AND p.cliente_id = ?
                                     WHERE c.zona_id = ? AND c.local_id = ? AND c.sector_id <=> ?");
         $stmt_total->execute([
+            $cliente_id_activo,
             $_SESSION['piqueo']['zona_id'], 
             $_SESSION['piqueo']['local_id'], 
             $_SESSION['piqueo']['sector_id']
@@ -691,20 +782,28 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_escaner' && isset($_SE
 if (isset($_GET['action']) && $_GET['action'] === 'piqueo_crear_producto' && isset($_SESSION['usuario_id'])) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['codigo_barras']) && !empty($_POST['descripcion'])) {
         $db = (new Database())->getConnection();
-        
+
+        // Sin una sesión de piqueo activa no sabemos a qué cliente pertenece el producto
+        if (!isset($_SESSION['piqueo']['local_id'])) {
+            header("Location: index.php?action=piqueo_config");
+            exit;
+        }
+        $stmt_cliente_local = $db->prepare("SELECT cliente_id FROM locales WHERE id = ?");
+        $stmt_cliente_local->execute([$_SESSION['piqueo']['local_id']]);
+        $cliente_id_activo = $stmt_cliente_local->fetchColumn();
+
         $codigo = trim(strtoupper($_POST['codigo_barras']));
         $sku = trim($_POST['sku'] ?? '');
         $descripcion = trim(strtoupper($_POST['descripcion'])); // Lo pasamos a mayúsculas para mantener el orden
 
-        // 1. Verificamos que alguien no lo haya creado 2 segundos antes
-        $check = $db->prepare("SELECT id FROM productos WHERE codigo_barras = ?");
-        $check->execute([$codigo]);
+        // 1. Verificamos que alguien no lo haya creado 2 segundos antes (para ESTE cliente)
+        $check = $db->prepare("SELECT id FROM productos WHERE codigo_barras = ? AND cliente_id = ?");
+        $check->execute([$codigo, $cliente_id_activo]);
         
         if (!$check->fetch()) {
-            // 2. Si no existe, lo creamos rápido
-            // Nota: Ajustá los nombres de las columnas si en tu base se llaman distinto
-            $stmt = $db->prepare("INSERT INTO productos (codigo_barras, sku, descripcion) VALUES (?, ?, ?)");
-            $stmt->execute([$codigo, $sku, $descripcion]);
+            // 2. Si no existe, lo creamos rápido, atado al cliente del local activo
+            $stmt = $db->prepare("INSERT INTO productos (cliente_id, codigo_barras, sku, descripcion) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$cliente_id_activo, $codigo, $sku, $descripcion]);
         }
         
         // 3. Lo devolvemos al escáner con un mensaje de éxito
@@ -769,8 +868,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'piqueo_visualizar' && isset($
     $stmt = $db->prepare("
         SELECT c.id, c.codigo_barras, c.cantidad, p.descripcion, p.sku 
         FROM conteos c
-        LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
-        WHERE c.local_id = ? AND c.sector_id <=> ? AND c.zona_id = ? AND c.usuario_id = ? AND c.id > ?
+        LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras AND p.cliente_id = (SELECT cliente_id FROM locales WHERE id = c.local_id)
         ORDER BY c.id DESC
     ");
     $stmt->execute([
@@ -932,6 +1030,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'editar_sector' && isset($_SES
 
 // 3. ELIMINACIÓN
 if (isset($_GET['action']) && $_GET['action'] === 'eliminar_sector' && isset($_SESSION['usuario_id'])) {
+    Security::validarCSRF_GET();
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
     
@@ -952,18 +1051,25 @@ if (isset($_GET['action']) && $_GET['action'] === 'eliminar_sector' && isset($_S
 // 1. LISTADO Y ALTA
 if (isset($_GET['action']) && $_GET['action'] === 'ajustes_locales' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+
+    // Un local siempre pertenece a un cliente: si no hay cliente activo, primero hay que elegirlo
+    if (!isset($_SESSION['cliente_id'])) {
+        header("Location: index.php?action=clientes_gestion&aviso=elegir_cliente_antes_de_crear_local");
+        exit;
+    }
+    $cliente_id = $_SESSION['cliente_id'];
+
     $db = (new Database())->getConnection();
 
-    // Procesar Alta de Local
     // Procesar Alta de Local
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['nombre'])) {
         $nombre_local = trim(strtoupper($_POST['nombre'])); // Forzamos mayúsculas para evitar dobles (ej: Centro y CENTRO)
         $direccion = trim($_POST['direccion']);
         $encargado_id = !empty($_POST['encargado_id']) ? $_POST['encargado_id'] : null;
 
-        // BARRERA DE SEGURIDAD: Buscamos si ya existe
-        $check_stmt = $db->prepare("SELECT id FROM locales WHERE nombre = ?");
-        $check_stmt->execute([$nombre_local]);
+        // BARRERA DE SEGURIDAD: Buscamos si ya existe UN LOCAL CON ESE NOMBRE PARA ESTE CLIENTE
+        $check_stmt = $db->prepare("SELECT id FROM locales WHERE nombre = ? AND cliente_id = ?");
+        $check_stmt->execute([$nombre_local, $cliente_id]);
         
         if ($check_stmt->fetch()) {
             // Si ya existe, abortamos y mandamos la señal de error
@@ -971,17 +1077,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'ajustes_locales' && isset($_S
             exit;
         }
 
-        // Si pasó la prueba, lo guardamos
-        $stmt = $db->prepare("INSERT INTO locales (nombre, direccion, encargado_id, estado) VALUES (?, ?, ?, 1)");
-        $stmt->execute([$nombre_local, $direccion, $encargado_id]);
+        // Si pasó la prueba, lo guardamos asociado al cliente activo
+        $stmt = $db->prepare("INSERT INTO locales (cliente_id, nombre, direccion, encargado_id, estado) VALUES (?, ?, ?, ?, 1)");
+        $stmt->execute([$cliente_id, $nombre_local, $direccion, $encargado_id]);
         header("Location: index.php?action=ajustes_locales");
         exit;
     }
 
-    // CORRECCIÓN 1: Cambiamos 'encargado_nom' por 'encargado_nombre'
+    // Solo listamos los locales DEL CLIENTE ACTIVO
     $listaLocales = $db->query("SELECT l.*, u.nombre_completo as encargado_nombre 
                                 FROM locales l 
                                 LEFT JOIN usuarios u ON l.encargado_id = u.id 
+                                WHERE l.cliente_id = " . intval($cliente_id) . "
                                 ORDER BY l.id DESC")->fetchAll();
 
     // CORRECCIÓN 2: Cambiamos la variable '$encargados' por '$listaUsuarios'
@@ -1035,6 +1142,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'editar_local' && isset($_SESS
 
 // 3. ELIMINACIÓN
 if (isset($_GET['action']) && $_GET['action'] === 'eliminar_local' && isset($_SESSION['usuario_id'])) {
+    Security::validarCSRF_GET();
     if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
     
@@ -1113,10 +1221,11 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
                     GROUP BY codigo_barras
                 ) c ON p.codigo_barras = c.codigo_barras
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
+                WHERE p.cliente_id = (SELECT cliente_id FROM locales WHERE id = ?)
                 ORDER BY p.descripcion ASC";
                 
         $stmt = $db->prepare($sql);
-        $stmt->execute([$local_id]);
+        $stmt->execute([$local_id, $local_id]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $codigo_excel = '="' . $row['codigo_barras'] . '"';
@@ -1149,10 +1258,11 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
                     GROUP BY codigo_barras
                 ) c ON p.codigo_barras = c.codigo_barras
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
+                WHERE p.cliente_id = (SELECT cliente_id FROM locales WHERE id = ?)
                 ORDER BY p.descripcion ASC";
                 
         $stmt = $db->prepare($sql);
-        $stmt->execute([$local_id]);
+        $stmt->execute([$local_id, $local_id]);
         
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $codigo_excel = '="' . $row['codigo_barras'] . '"'; 
@@ -1182,7 +1292,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'inventario_exportar' && iss
                     s.nombre as sector_nombre, z.codigo as zona_codigo,
                     cat.nombre as categoria_nombre
                 FROM conteos c
-                LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras
+                LEFT JOIN productos p ON c.codigo_barras = p.codigo_barras AND p.cliente_id = (SELECT cliente_id FROM locales WHERE id = c.local_id)
                 LEFT JOIN zonas z ON c.zona_id = z.id
                 LEFT JOIN sectores s ON c.sector_id = s.id
                 LEFT JOIN categorias cat ON p.categoria_id = cat.id
@@ -1222,16 +1332,23 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos' && isset($_SESSION
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'productos_alta' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+
+    if (!isset($_SESSION['cliente_id'])) {
+        header("Location: index.php?action=clientes_gestion&aviso=elegir_cliente");
+        exit;
+    }
+
     $db = (new Database())->getConnection();
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['codigo_barras'])) {
         try {
-            // Agregamos los nuevos campos a la consulta SQL
-            $sql = "INSERT INTO productos (codigo_barras, sku, descripcion, marca, categoria_id) 
-                    VALUES (:codigo_barras, :sku, :descripcion, :marca, :categoria_id)";
+            // Agregamos los nuevos campos a la consulta SQL (siempre atado al cliente activo)
+            $sql = "INSERT INTO productos (cliente_id, codigo_barras, sku, descripcion, marca, categoria_id) 
+                    VALUES (:cliente_id, :codigo_barras, :sku, :descripcion, :marca, :categoria_id)";
             $stmt = $db->prepare($sql);
             
             $stmt->execute([
+                'cliente_id' => $_SESSION['cliente_id'],
                 'codigo_barras' => trim($_POST['codigo_barras']),
                 'sku' => trim($_POST['sku']), // Ahora es obligatorio
                 'descripcion' => trim(strtoupper($_POST['descripcion'])), // Mayúsculas para mantener proljo el catálogo
@@ -1254,16 +1371,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_alta' && isset($_SE
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'productos_exportar_csv' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    if (!isset($_SESSION['cliente_id'])) { header("Location: index.php?action=clientes_gestion&aviso=elegir_cliente"); exit; }
     $db = (new Database())->getConnection();
 
-    // Traemos todos los productos con los nombres de su categoría 
-    $productos = $db->query("
+    // Traemos solo los productos DEL CLIENTE ACTIVO, con los nombres de su categoría
+    $stmt = $db->prepare("
         SELECT p.codigo_barras, p.sku, p.descripcion, p.marca, 
                c.nombre as categoria 
         FROM productos p 
         LEFT JOIN categorias c ON p.categoria_id = c.id 
+        WHERE p.cliente_id = ?
         ORDER BY p.descripcion ASC
-    ")->fetchAll(PDO::FETCH_ASSOC);
+    ");
+    $stmt->execute([$_SESSION['cliente_id']]);
+    $productos = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Configuramos las cabeceras para forzar la descarga del archivo CSV
     header('Content-Type: text/csv; charset=utf-8');
@@ -1290,16 +1411,20 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_exportar_csv' && is
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'productos_gestion' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] > 2) { die("Acceso denegado."); }
+    if (!isset($_SESSION['cliente_id'])) { header("Location: index.php?action=clientes_gestion&aviso=elegir_cliente"); exit; }
     $db = (new Database())->getConnection();
 
-    // Traemos TODOS los productos para alimentar el buscador en tiempo real de JavaScript.
+    // Traemos los productos DEL CLIENTE ACTIVO para alimentar el buscador en tiempo real de JavaScript.
     // Cruzamos los datos con categorías para obtener los nombres reales.
-    $listaProductos = $db->query("
+    $stmt = $db->prepare("
         SELECT p.*, c.nombre as categoria_nombre
         FROM productos p 
         LEFT JOIN categorias c ON p.categoria_id = c.id 
+        WHERE p.cliente_id = ?
         ORDER BY p.id DESC
-    ")->fetchAll();
+    ");
+    $stmt->execute([$_SESSION['cliente_id']]);
+    $listaProductos = $stmt->fetchAll();
 
     require_once __DIR__ . '/../src/Application/Views/productos_gestion.php';
     exit;
@@ -1313,15 +1438,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_
     $id = $_GET['id'] ?? null;
 
     if (!$id) { header("Location: index.php?action=productos_gestion"); exit; }
+    if (!isset($_SESSION['cliente_id'])) { header("Location: index.php?action=clientes_gestion&aviso=elegir_cliente"); exit; }
 
     // --- PROCESAR LA ACTUALIZACIÓN (POST) ---
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
+            // El WHERE incluye cliente_id para que no se pueda editar (ni por URL manual)
+            // un producto de otro cliente.
             $sql = "UPDATE productos SET 
                     codigo_barras = :cb, sku = :sku, descripcion = :desc, 
                     marca = :marca, 
                     categoria_id = :cat
-                    WHERE id = :id";
+                    WHERE id = :id AND cliente_id = :cliente_id";
             
             $stmt = $db->prepare($sql);
             $stmt->execute([
@@ -1330,7 +1458,8 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_
                 'desc'  => trim(strtoupper($_POST['descripcion'])),
                 'marca' => !empty($_POST['marca']) ? trim(strtoupper($_POST['marca'])) : null,
                 'cat'   => !empty($_POST['categoria_id']) ? intval($_POST['categoria_id']) : null,
-                'id'    => $id
+                'id'    => $id,
+                'cliente_id' => $_SESSION['cliente_id']
             ]);
             
             // 🔥 LA MAGIA ESTÁ ACÁ: Redirigimos al listado con un mensaje de éxito por URL
@@ -1344,9 +1473,9 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_
         }
     }
 
-    // --- CARGAR DATOS DEL PRODUCTO ---
-    $stmt = $db->prepare("SELECT * FROM productos WHERE id = ?");
-    $stmt->execute([$id]);
+    // --- CARGAR DATOS DEL PRODUCTO (solo si es del cliente activo) ---
+    $stmt = $db->prepare("SELECT * FROM productos WHERE id = ? AND cliente_id = ?");
+    $stmt->execute([$id, $_SESSION['cliente_id']]);
     $p = $stmt->fetch();
 
     if (!$p) { die("Producto no encontrado."); }
@@ -1359,16 +1488,18 @@ if (isset($_GET['action']) && $_GET['action'] === 'productos_editar' && isset($_
 // ==========================================
 // --- 2. NUEVA ACCIÓN: ELIMINAR PRODUCTO dentro de productos_gestion ---
 if (isset($_GET['action']) && $_GET['action'] === 'productos_eliminar' && isset($_SESSION['usuario_id'])) {
+    Security::validarCSRF_GET();
     // Seguridad: Solo el administrador (Rol 1) puede borrar productos
     if ($_SESSION['rol_id'] != 1) { die("Acceso denegado. Solo administradores pueden eliminar productos."); }
     
+    if (!isset($_SESSION['cliente_id'])) { header("Location: index.php?action=clientes_gestion&aviso=elegir_cliente"); exit; }
     $db = (new Database())->getConnection();
     $id = $_GET['id'] ?? null;
 
     if ($id) {
         try {
-            $stmt = $db->prepare("DELETE FROM productos WHERE id = ?");
-            $stmt->execute([$id]);
+            $stmt = $db->prepare("DELETE FROM productos WHERE id = ? AND cliente_id = ?");
+            $stmt->execute([$id, $_SESSION['cliente_id']]);
             header("Location: index.php?action=productos_gestion&msj=eliminado");
         } catch (Exception $e) {
             header("Location: index.php?action=productos_gestion&msj=error_borrado");
@@ -1455,6 +1586,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'editar_usuario' && isset($_SE
 
 // 3. ELIMINACIÓN
 if (isset($_GET['action']) && $_GET['action'] === 'eliminar_usuario' && isset($_SESSION['usuario_id'])) {
+    Security::validarCSRF_GET();
     if ($_SESSION['rol_id'] != 1) { die("Acceso denegado."); }
     $db = (new Database())->getConnection();
     
@@ -1613,12 +1745,36 @@ if (isset($_GET['action']) && $_GET['action'] === 'actas_menu' && isset($_SESSIO
 // ==========================================
 if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESSION['usuario_id'])) {
     if ($_SESSION['rol_id'] != 1) { die("Acceso denegado. Solo administradores."); }
+
+    // Sin cliente activo no se puede importar nada: primero hay que elegir a quién pertenece el catálogo
+    if (!isset($_SESSION['cliente_id'])) {
+        header("Location: index.php?action=clientes_gestion&aviso=elegir_cliente_antes_de_importar");
+        exit;
+    }
+    $cliente_id = $_SESSION['cliente_id'];
+
     $db = (new Database())->getConnection();
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['archivo_csv'])) {
         $archivo = $_FILES['archivo_csv']['tmp_name'];
+        $nombreOriginal = $_FILES['archivo_csv']['name'];
+        $extension = strtolower(pathinfo($nombreOriginal, PATHINFO_EXTENSION));
+        $MAX_BYTES = 10 * 1024 * 1024; // 10 MB, de sobra para un catálogo
 
-        if (($handle = fopen($archivo, "r")) !== FALSE) {
+        // Validaciones ANTES de tocar el archivo: evita procesar algo que
+        // no sea realmente un CSV (por más que alguien le haya puesto la
+        // extensión .csv a otra cosa) o que sea excesivamente grande.
+        if ($_FILES['archivo_csv']['error'] !== UPLOAD_ERR_OK) {
+            $error = "❌ Hubo un problema al subir el archivo. Intentá de nuevo.";
+        } elseif ($extension !== 'csv') {
+            $error = "❌ Solo se aceptan archivos .csv.";
+        } elseif ($_FILES['archivo_csv']['size'] > $MAX_BYTES) {
+            $error = "❌ El archivo supera el tamaño máximo permitido (10 MB).";
+        } elseif (!is_uploaded_file($archivo)) {
+            // Chequeo extra: el archivo tiene que haber llegado realmente
+            // por un formulario de subida, no ser una ruta armada a mano.
+            $error = "❌ Subida de archivo inválida.";
+        } elseif (($handle = fopen($archivo, "r")) !== FALSE) {
             // 1. Leer la primera fila y detectar el delimitador correcto
             $delimitador = ",";
             $headers = fgetcsv($handle, 1000, $delimitador); 
@@ -1660,12 +1816,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESS
                 $error = "❌ El archivo no es válido. Faltan las columnas 'Nombre/Descripción' o 'Código de barras'.";
             } else {
                 $insertados = 0;
-                $duplicados = 0;
+                $actualizados = 0;
 
-                $check_stmt = $db->prepare("SELECT id FROM productos WHERE codigo_barras = ?");
-                $insert_stmt = $db->prepare("INSERT INTO productos (codigo_barras, sku, descripcion) VALUES (:cb, :sku, :desc)");
+                // Ahora la búsqueda de duplicados es POR CLIENTE: dos clientes
+                // pueden tener el mismo código de barras sin pisarse entre sí.
+                $check_stmt = $db->prepare("SELECT id FROM productos WHERE cliente_id = :cid AND codigo_barras = :cb");
+                $insert_stmt = $db->prepare("INSERT INTO productos (cliente_id, codigo_barras, sku, descripcion) VALUES (:cid, :cb, :sku, :desc)");
+                $update_stmt = $db->prepare("UPDATE productos SET sku = :sku, descripcion = :desc WHERE cliente_id = :cid AND codigo_barras = :cb");
 
-                // 4. Recorrer fila por fila
+                // 4. Recorrer fila por fila (upsert: si ya existe para este cliente, se actualiza)
                 while (($datos = fgetcsv($handle, 1000, $delimitador)) !== FALSE) {
                     if (empty($datos) || count($datos) < 2) continue;
 
@@ -1674,24 +1833,34 @@ if (isset($_GET['action']) && $_GET['action'] === 'importar_csv' && isset($_SESS
 
                     if (empty($codigo)) continue;
 
-                    $check_stmt->execute([$codigo]);
-                    if (!$check_stmt->fetch()) {
-                        
-                        // Protección contra valores vacíos para que la base de datos no tire error
-                        $sku = ($idx_sku !== false && isset($datos[$idx_sku]) && $datos[$idx_sku] !== '') ? trim($datos[$idx_sku]) : $codigo;
-                       
+                    // Protección contra valores vacíos para que la base de datos no tire error
+                    $sku = ($idx_sku !== false && isset($datos[$idx_sku]) && $datos[$idx_sku] !== '') ? trim($datos[$idx_sku]) : $codigo;
 
+                    $check_stmt->execute(['cid' => $cliente_id, 'cb' => $codigo]);
+                    if (!$check_stmt->fetch()) {
                         $insert_stmt->execute([
+                            'cid' => $cliente_id,
                             'cb' => $codigo,
                             'sku' => $sku,
                             'desc' => $descripcion,
                         ]);
                         $insertados++;
                     } else {
-                        $duplicados++;
+                        $update_stmt->execute([
+                            'sku' => $sku,
+                            'desc' => $descripcion,
+                            'cid' => $cliente_id,
+                            'cb' => $codigo,
+                        ]);
+                        $actualizados++;
                     }
                 }
-                $exito = "✅ Importación exitosa. Se agregaron <strong>$insertados</strong> productos nuevos. ($duplicados ya existían).";
+
+                // Registramos el historial de esta importación
+                $log_stmt = $db->prepare("INSERT INTO importaciones_catalogo (cliente_id, usuario_id, nombre_archivo, insertados, actualizados) VALUES (?, ?, ?, ?, ?)");
+                $log_stmt->execute([$cliente_id, $_SESSION['usuario_id'], $_FILES['archivo_csv']['name'], $insertados, $actualizados]);
+
+                $exito = "✅ Importación exitosa para <strong>" . htmlspecialchars($_SESSION['cliente_nombre']) . "</strong>. Se agregaron <strong>$insertados</strong> productos nuevos y se actualizaron <strong>$actualizados</strong> existentes.";
             }
             fclose($handle);
         } else {
@@ -1851,24 +2020,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $db = (new Database())->getConnection();
-        
-        // Buscamos al usuario en la base de datos (y nos aseguramos de que esté activo)
-        $stmt = $db->prepare("SELECT id, nombre_completo, password, rol_id FROM usuarios WHERE usuario = :usuario AND estado = 1");
-        $stmt->execute(['usuario' => $usuarioInput]);
-        $user = $stmt->fetch();
 
-        // Si el usuario existe y la contraseña encriptada coincide con la que escribió
-        if ($user && password_verify($passwordInput, $user['password'])) {
-            // Guardamos sus datos en la "credencial" de la sesión
-            $_SESSION['usuario_id'] = $user['id'];
-            $_SESSION['rol_id'] = $user['rol_id'];
-            $_SESSION['nombre_completo'] = $user['nombre_completo'];
-            
-            // Recargamos la página para que entre al panel
-            header("Location: index.php");
-            exit;
+        // Freno de fuerza bruta: si este usuario (o esta IP) ya falló demasiadas
+        // veces seguidas en los últimos minutos, ni siquiera consultamos la
+        // contraseña — así no le damos más intentos para probar combinaciones.
+        if (Security::estaBloqueado($db, $usuarioInput)) {
+            $minutos = Security::minutosDeBloqueoRestantes($db, $usuarioInput);
+            $error = "🔒 Demasiados intentos fallidos. Probá de nuevo en unos {$minutos} minuto(s).";
         } else {
-            $error = "Usuario o contraseña incorrectos.";
+            // Buscamos al usuario en la base de datos (y nos aseguramos de que esté activo)
+            $stmt = $db->prepare("SELECT id, nombre_completo, password, rol_id FROM usuarios WHERE usuario = :usuario AND estado = 1");
+            $stmt->execute(['usuario' => $usuarioInput]);
+            $user = $stmt->fetch();
+
+            // Si el usuario existe y la contraseña encriptada coincide con la que escribió
+            if ($user && password_verify($passwordInput, $user['password'])) {
+                Security::registrarIntento($db, $usuarioInput, true);
+                Security::limpiarIntentos($db, $usuarioInput);
+
+                // Regeneramos el ID de sesión al loguear: evita "session fixation"
+                // (que alguien te pase un link con un ID de sesión ya armado).
+                session_regenerate_id(true);
+
+                // Guardamos sus datos en la "credencial" de la sesión
+                $_SESSION['usuario_id'] = $user['id'];
+                $_SESSION['rol_id'] = $user['rol_id'];
+                $_SESSION['nombre_completo'] = $user['nombre_completo'];
+
+                // Recargamos la página para que entre al panel
+                header("Location: index.php");
+                exit;
+            } else {
+                Security::registrarIntento($db, $usuarioInput, false);
+                $error = "Usuario o contraseña incorrectos.";
+            }
         }
     } catch (Exception $e) {
         $error = "Error del sistema al intentar conectar.";

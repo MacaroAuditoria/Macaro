@@ -21,6 +21,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'inventario_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📁 Cargar Inventario Cliente</div>
     <div><a href="index.php?action=dashboard" class="btn-primario" style="background: #6c757d; text-decoration:none;">Volver</a></div>
@@ -29,12 +33,18 @@
 <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; margin: 40px auto; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
     
     <h2 style="margin-top: 0; color: #333; border-bottom: 2px solid #2196f3; padding-bottom: 10px;">Importación desde Loyverse</h2>
-    <p style="color: #666; margin-bottom: 25px;">Seleccione el archivo CSV exportado desde el sistema del cliente. MACARO extraerá automáticamente los Códigos de Barra, Descripciones para alimentar el catálogo.</p>
+    <p style="color: #666; margin-bottom: 10px;">Seleccione el archivo CSV exportado desde el sistema del cliente. MACARO extraerá automáticamente los Códigos de Barra, Descripciones para alimentar el catálogo.</p>
+
+    <p style="background:#fff3e0; color:#e65100; padding:10px 15px; border-radius:6px; font-size:14px; margin-bottom:20px;">
+        📌 Cliente activo: <strong><?php echo htmlspecialchars($_SESSION['cliente_nombre'] ?? 'Ninguno'); ?></strong>
+        &nbsp;|&nbsp; <a href="index.php?action=clientes_gestion" style="color:#e65100;">Cambiar cliente</a>
+    </p>
 
     <?php if (isset($error)) echo "<div style='background:#ffebee; color:#c62828; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;'>$error</div>"; ?>
     <?php if (isset($exito)) echo "<div style='background:#e8f5e9; color:#2e7d32; padding:15px; border-radius:6px; margin-bottom:20px; font-weight:bold;'>$exito</div>"; ?>
 
     <form method="POST" action="index.php?action=importar_csv" enctype="multipart/form-data">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         
         <div class="upload-box">
             <span style="font-size: 40px;">📄</span><br>
@@ -44,6 +54,9 @@
 
         <button type="submit" class="btn-primario" style="width: 100%; padding: 15px; font-size: 16px;">🚀 Procesar e Importar Productos</button>
     </form>
+</div>
+
+</main>
 </div>
 
 </body>

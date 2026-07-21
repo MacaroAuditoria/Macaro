@@ -7,6 +7,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'usuarios_gestion'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">✏️ Editando a: <?php echo htmlspecialchars($usuario_editar['nombre_completo']); ?></div>
     <a href="index.php?action=usuarios_gestion" class="logout-btn" style="background:#666;">Cancelar</a>
@@ -22,6 +26,7 @@
         <?php endif; ?>
 
         <form method="POST" action="index.php?action=editar_usuario">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <input type="hidden" name="id" value="<?php echo $usuario_editar['id']; ?>">
             
             <div class="form-group">
@@ -74,6 +79,9 @@
             <button type="submit" class="btn-primario">Actualizar Usuario</button>
         </form>
     </div>
+</div>
+
+</main>
 </div>
 
 </body>

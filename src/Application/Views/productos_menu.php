@@ -7,6 +7,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'catalogo'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📦 Gestión de Productos</div>
     <div>
@@ -26,6 +30,9 @@
         <h3 class="menu-title">Buscar / Gestionar</h3>
         <p style="font-size: 12px; color: #666;">Buscador y Modificaciones</p>
     </a>
+</div>
+
+</main>
 </div>
 
 </body>

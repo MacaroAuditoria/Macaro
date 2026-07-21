@@ -91,6 +91,7 @@
     if (isset($_GET['prod_creado'])) { $mensaje_estado = "<div class='success-card'>✅ Producto " . htmlspecialchars($_GET['prod_creado']) . " creado con éxito. Ya podés escanearlo.</div>"; } ?>
     
     <form method="POST" action="index.php?action=piqueo_escaner" id="scanForm">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
         <label class="etiqueta-centrada">CÓDIGO DE BARRAS</label>
         <div class="input-group">
             <input type="text" name="codigo_barras" id="codigo" class="input-barcode" required autocomplete="off">
@@ -115,6 +116,7 @@
         <h3 style="margin-top: 0; color: #333; border-bottom: 2px solid #00897b; padding-bottom: 10px; font-size: 20px;">📦 Alta Rápida</h3>
         
         <form action="index.php?action=piqueo_crear_producto" method="POST">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #555; font-size: 14px;">Código de Barras *</label>
             <input type="text" name="codigo_barras" required placeholder="Ej: 7730000000000" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px;">
 

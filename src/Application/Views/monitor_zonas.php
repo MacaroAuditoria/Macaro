@@ -17,6 +17,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'monitor_zonas'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">📊 Monitor de Zonas en Vivo</div>
     <a href="index.php?action=dashboard" class="logout-btn" style="background:#666;">Volver</a>
@@ -73,6 +77,7 @@
         <div style="display: flex; align-items: center; gap: 15px;">
             <strong style="color: #2e7d32;">➕ Agregar Nueva Zona al Sistema:</strong>
             <form method="POST" action="index.php" style="display: flex; gap: 10px;">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
                 <input type="hidden" name="action" value="zonas_crear_rapido">
                 <input type="hidden" name="local_id" value="<?php echo $local_id; ?>">
                 <input type="hidden" name="sector_id" value="<?php echo $sector_id; ?>">
@@ -126,7 +131,7 @@
                             
                             <a href="index.php?action=monitor_vaciar_zona&local_id=<?php echo $local_id; ?>&sector_id=<?php echo $sector_id; ?>&zona_id=<?php echo $fila['zona_id']; ?>" style="color: #ff9800; font-weight: bold; text-decoration: none; margin-left: 15px;" onclick="return confirm('⚠️ ATENCIÓN: \n\n¿Seguro que querés VACIAR esta zona? \nSe borrarán los productos pero la zona seguirá existiendo.');">🗑️ Vaciar</a>
                                 
-                            <a href="index.php?action=monitor_eliminar_zona&local_id=<?php echo $local_id; ?>&sector_id=<?php echo $sector_id; ?>&zona_id=<?php echo $fila['zona_id']; ?>" style="color: #c62828; font-weight: bold; text-decoration: none; margin-left: 15px;" onclick="return confirm('🚨 PELIGRO EXTREMO: \n\n¿Seguro que querés ELIMINAR COMPLETAMENTE esta zona del sistema? \nDesaparecerá de la lista y se borrarán sus conteos. \n\n¡Esta acción NO se puede deshacer!');">❌ Borrar</a>
+                            <a href="index.php?action=monitor_eliminar_zona&local_id=<?php echo $local_id; ?>&sector_id=<?php echo $sector_id; ?>&zona_id=<?php echo $fila['zona_id']; ?>&csrf=<?php echo urlencode($_SESSION['csrf_token']); ?>" style="color: #c62828; font-weight: bold; text-decoration: none; margin-left: 15px;" onclick="return confirm('🚨 PELIGRO EXTREMO: \n\n¿Seguro que querés ELIMINAR COMPLETAMENTE esta zona del sistema? \nDesaparecerá de la lista y se borrarán sus conteos. \n\n¡Esta acción NO se puede deshacer!');">❌ Borrar</a>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -192,6 +197,9 @@
         estadoFiltro.addEventListener('change', aplicarFiltroEstado);
     }
 </script>
+
+</main>
+</div>
 
 </body>
 </html>

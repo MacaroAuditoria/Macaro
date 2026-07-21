@@ -7,6 +7,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'ajustes_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">✏️ Editando: <?php echo htmlspecialchars($local['nombre']); ?></div>
     <a href="index.php?action=ajustes_locales" class="logout-btn" style="background:#666;">Cancelar</a>
@@ -15,6 +19,7 @@
 <div class="container-abm">
     <div class="card-form" style="max-width: 500px; margin: 0 auto;">
         <form method="POST" action="index.php?action=editar_local">
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>
             <input type="hidden" name="id" value="<?php echo $local['id']; ?>">
             
             <div class="form-group">
@@ -39,6 +44,9 @@
             <button type="submit" class="btn-primario">Actualizar Cambios</button>
         </form>
     </div>
+</div>
+
+</main>
 </div>
 
 </body>

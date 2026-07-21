@@ -15,6 +15,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'catalogo'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">✏️ Editando: <?php echo htmlspecialchars($p['descripcion']); ?></div>
     <div>
@@ -27,7 +31,8 @@
     <?php if (isset($error)) echo "<div style='background:#ffebee; color:#c62828; padding:15px; border-radius:6px; margin-bottom:20px;'>$error</div>"; ?>
     <?php if (isset($exito)) echo "<div style='background:#e8f5e9; color:#2e7d32; padding:15px; border-radius:6px; margin-bottom:20px;'>$exito</div>"; ?>
     
-    <form method="POST" action="index.php?action=productos_editar&id=<?php echo $p['id']; ?>">
+    <form method="POST" action="index.php?action=productos_editar&id=<?php echo $p['id']; ?>
+<?php echo \App\Infrastructure\Security::campoCSRF(); ?>">
         
         <div class="form-grid">
             <div class="form-group full-width">
@@ -67,6 +72,9 @@
             <button type="submit" class="btn-primario" style="background: #4caf50; font-size: 16px; padding: 12px 24px;">💾 Guardar Cambios</button>
         </div>
     </form>
+</div>
+
+</main>
 </div>
 
 </body>

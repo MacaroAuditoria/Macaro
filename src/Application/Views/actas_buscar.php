@@ -7,6 +7,10 @@
 </head>
 <body class="dashboard-container">
 
+<div class="app-shell">
+<?php $seccion_activa = 'actas_menu'; require __DIR__ . '/partials/sidebar.php'; ?>
+<main class="main-content">
+
 <div class="header">
     <div class="user-info">🔍 Buscador de Actas Históricas</div>
     <a href="index.php?action=actas_menu" class="logout-btn" style="background:#666;">Volver</a>
@@ -74,6 +78,9 @@
             </tbody>
         </table>
     </div>
+</div>
+
+</main>
 </div>
 
 </body>
